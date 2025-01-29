@@ -36,6 +36,7 @@ jobs:
               "fmt"
               "net/http"
               "os"
+              "path/filepath"
               "regexp"
               "strings"
           )
@@ -104,10 +105,31 @@ jobs:
               return "Unknown"
           }
 
-          func parseKotlinDependencies(filePath string) []Dependency {
+          func findFileRecursive(root string, target string) (string, error) {
+              var foundFile string
+              err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+                  if err != nil {
+                      return err
+                  }
+                  if strings.EqualFold(info.Name(), target) {
+                      foundFile = path
+                      return filepath.SkipDir // Stop searching once the file is found
+                  }
+                  return nil
+              })
+              return foundFile, err
+          }
+
+          func parseKotlinDependencies(rootDir string, targetFile string) []Dependency {
+              filePath, err := findFileRecursive(rootDir, targetFile)
+              if err != nil || filePath == "" {
+                  fmt.Printf("Error finding %s: %v\n", targetFile, err)
+                  return nil
+              }
+
               file, err := os.Open(filePath)
               if err != nil {
-                  fmt.Printf("Error reading %s: %v\n", filePath, err)
+                  fmt.Printf("Error opening %s: %v\n", filePath, err)
                   return nil
               }
               defer file.Close()
@@ -170,7 +192,9 @@ jobs:
           }
 
           func main() {
-              dependencies := parseKotlinDependencies("../libs.versions.toml")
+              rootDir := "../"             // Root directory to search
+              targetFile := "libs.versions.toml" // Target file to find
+              dependencies := parseKotlinDependencies(rootDir, targetFile)
               generateHTMLReport(dependencies)
               fmt.Println("Dependency license report generated: dependency-license-report.html")
           }
