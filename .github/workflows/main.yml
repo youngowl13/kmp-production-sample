@@ -3,7 +3,7 @@ name: Kotlin Dependency License Check
 on:
   push:
     branches:
-      - master  # Or your main branch name
+      - master
 
 jobs:
   check-licenses:
@@ -31,285 +31,285 @@ jobs:
           package main
 
           import (
-           "encoding/xml"
-           "fmt"
-           "io/fs"
-           "io/ioutil"
-           "net/http"
-           "os"
-           "path/filepath"
-           "strings"
+                  "encoding/xml"
+                  "fmt"
+                  "io/fs"
+                  "io/ioutil"
+                  "net/http"
+                  "os"
+                  "path/filepath"
+                  "strings"
 
-           "github.com/pelletier/go-toml"
-           "github.com/PuerkitoBio/goquery"
+                  "github.com/pelletier/go-toml"
+                  "github.com/PuerkitoBio/goquery"
           )
 
           // Structs to parse POM XML
           type MavenPOM struct {
-           XMLName    xml.Name  `xml:"project"`
-           GroupID    string    `xml:"groupId"`
-           ArtifactID string    `xml:"artifactId"`
-           Version    string    `xml:"version"`
-           Licenses  License `xml:"licenses>license"`
-           Parent     Parent    `xml:"parent"`
+                  XMLName    xml.Name  `xml:"project"`
+                  GroupID    string    `xml:"groupId"`
+                  ArtifactID string    `xml:"artifactId"`
+                  Version    string    `xml:"version"`
+                  Licenses  License `xml:"licenses>license"`
+                  Parent     Parent    `xml:"parent"`
           }
 
           type License struct {
-           Name string `xml:"name"`
-           URL  string `xml:"url"`
+                  Name string `xml:"name"`
+                  URL  string `xml:"url"`
           }
 
           type Parent struct {
-           GroupID    string `xml:"groupId"`
-           ArtifactID string `xml:"artifactId"`
-           Version    string `xml:"version"`
+                  GroupID    string `xml:"groupId"`
+                  ArtifactID string `xml:"artifactId"`
+                  Version    string `xml:"version"`
           }
 
           // Fetch POM file from a given URL
           func fetchPOM(url string) (byte, error) {
-           resp, err:= http.Get(url)
-           if err!= nil {
-            return nil, err
-           }
-           defer resp.Body.Close()
-           if resp.StatusCode!= http.StatusOK {
-            return nil, fmt.Errorf("failed to fetch POM: %s", resp.Status)
-           }
-           return ioutil.ReadAll(resp.Body)
+                  resp, err:= http.Get(url)
+                  if err!= nil {
+                          return nil, err
+                  }
+                  defer resp.Body.Close()
+                  if resp.StatusCode!= http.StatusOK {
+                          return nil, fmt.Errorf("failed to fetch POM: %s", resp.Status)
+                  }
+                  return ioutil.ReadAll(resp.Body)
           }
 
           // Parse POM XML data
           func parsePOM(databyte) (MavenPOM, error) {
-           var pom MavenPOM
-           err:= xml.Unmarshal(data, &pom)
-           return pom, err
+                  var pom MavenPOM
+                  err:= xml.Unmarshal(data, &pom)
+                  return pom, err
           }
 
           // Construct POM URL based on repository base URL and artifact coordinates
           func constructPOMURL(repoBaseURL, groupID, artifactID, version string) string {
-           groupPath:= strings.ReplaceAll(groupID, ".", "/")
-           return fmt.Sprintf("%s/%s/%s/%s/%s-%s.pom", repoBaseURL, groupPath, artifactID, version, artifactID, version)
+                  groupPath:= strings.ReplaceAll(groupID, ".", "/")
+                  return fmt.Sprintf("%s/%s/%s/%s/%s-%s.pom", repoBaseURL, groupPath, artifactID, version, artifactID, version)
           }
 
           // copyleftKeywords contains keywords commonly associated with copyleft licenses
           var copyleftKeywords =string{
-           "gpl", "gnu general public license", "lgpl", "gnu lesser general public license", "agpl", "gnu affero general public license",
-           "mozilla public license", "mpl", "common development and distribution license", "cddl", "eclipse public license", "epl",
+                  "gpl", "gnu general public license", "lgpl", "gnu lesser general public license", "agpl", "gnu affero general public license",
+                  "mozilla public license", "mpl", "common development and distribution license", "cddl", "eclipse public license", "epl",
           }
 
           // isCopyleft checks if a license name or URL indicates a copyleft license
           func isCopyleft(licenseName, licenseURL string) bool {
-           licenseName = strings.ToLower(licenseName)
-           licenseURL = strings.ToLower(licenseURL)
-           for _, keyword:= range copyleftKeywords {
-            if strings.Contains(licenseName, keyword) || strings.Contains(licenseURL, keyword) {
-             return true
-            }
-           }
-           return false
+                  licenseName = strings.ToLower(licenseName)
+                  licenseURL = strings.ToLower(licenseURL)
+                  for _, keyword:= range copyleftKeywords {
+                          if strings.Contains(licenseName, keyword) || strings.Contains(licenseURL, keyword) {
+                                  return true
+                          }
+                  }
+                  return false
           }
 
           // Retrieve license information for a given artifact
           func retrieveLicenseInfo(groupID, artifactID, version string) (License, error) {
-           mavenCentralURL:= "https://repo1.maven.org/maven2"
-           googleMavenURL:= "https://dl.google.com/dl/android/maven2"
+                  mavenCentralURL:= "https://repo1.maven.org/maven2"
+                  googleMavenURL:= "https://dl.google.com/dl/android/maven2"
 
-           // Attempt to fetch from Maven Central
-           url:= constructPOMURL(mavenCentralURL, groupID, artifactID, version)
-           data, err:= fetchPOM(url)
-           if err!= nil {
-            // If failed, attempt to fetch from Google's Maven Repository
-            url = constructPOMURL(googleMavenURL, groupID, artifactID, version)
-            data, err = fetchPOM(url)
-            if err!= nil {
-             // If failed to fetch from both repositories, try searching online
-             fmt.Printf("Failed to fetch POM for %s:%s:%s from known repositories. Trying web search...\n", groupID, artifactID, version)
-             searchURL:= fmt.Sprintf("https://www.google.com/search?q=%s+%s+%s+maven+repository", groupID, artifactID, version)
-             doc, err:= goquery.NewDocument(searchURL)
-             if err!= nil {
-              return nil, fmt.Errorf("failed to search online: %v", err)
-             }
-             // Extract the first result URL
-             firstResultURL:= doc.Find("a").First().AttrOr("href", "")
-             if firstResultURL == "" {
-              // If no results are found, provide a link to a pre-populated Google search
-              searchURL:= fmt.Sprintf("https://www.google.com/search?q=%s+%s+%s+maven+repository", groupID, artifactID, version)
-              return nil, fmt.Errorf("no results found online. Try searching manually: %s", searchURL)
-             }
-             fmt.Printf("Found potential match: %s\n", firstResultURL)
-             // Try fetching POM directly from the URL
-             pomData, err:= fetchPOM(firstResultURL)
-             if err!= nil {
-              return nil, fmt.Errorf("failed to fetch POM from %s: %v", firstResultURL, err)
-             }
-             pom, err:= parsePOM(pomData)
-             if err!= nil {
-              return nil, fmt.Errorf("failed to parse POM from %s: %v", firstResultURL, err)
-             }
-             return pom.Licenses, nil
-            }
-           }
+                  // Attempt to fetch from Maven Central
+                  url:= constructPOMURL(mavenCentralURL, groupID, artifactID, version)
+                  data, err:= fetchPOM(url)
+                  if err!= nil {
+                          // If failed, attempt to fetch from Google's Maven Repository
+                          url = constructPOMURL(googleMavenURL, groupID, artifactID, version)
+                          data, err = fetchPOM(url)
+                          if err!= nil {
+                                  // If failed to fetch from both repositories, try searching online
+                                  fmt.Printf("Failed to fetch POM for %s:%s:%s from known repositories. Trying web search...\n", groupID, artifactID, version)
+                                  searchURL:= fmt.Sprintf("https://www.google.com/search?q=%s+%s+%s+maven+repository", groupID, artifactID, version)
+                                  doc, err:= goquery.NewDocument(searchURL)
+                                  if err!= nil {
+                                          return nil, fmt.Errorf("failed to search online: %v", err)
+                                  }
+                                  // Extract the first result URL
+                                  firstResultURL:= doc.Find("a").First().AttrOr("href", "")
+                                  if firstResultURL == "" {
+                                          // If no results are found, provide a link to a pre-populated Google search
+                                          searchURL:= fmt.Sprintf("https://www.google.com/search?q=%s+%s+%s+maven+repository", groupID, artifactID, version)
+                                          return nil, fmt.Errorf("no results found online. Try searching manually: %s", searchURL)
+                                  }
+                                  fmt.Printf("Found potential match: %s\n", firstResultURL)
+                                  // Try fetching POM directly from the URL
+                                  pomData, err:= fetchPOM(firstResultURL)
+                                  if err!= nil {
+                                          return nil, fmt.Errorf("failed to fetch POM from %s: %v", firstResultURL, err)
+                                  }
+                                  pom, err:= parsePOM(pomData)
+                                  if err!= nil {
+                                          return nil, fmt.Errorf("failed to parse POM from %s: %v", firstResultURL, err)
+                                  }
+                                  return pom.Licenses, nil
+                          }
+                  }
 
-           pom, err:= parsePOM(data)
-           if err!= nil {
-            return nil, err
-           }
+                  pom, err:= parsePOM(data)
+                  if err!= nil {
+                          return nil, err
+                  }
 
-           // Return licenses if available
-           if len(pom.Licenses) > 0 {
-            return pom.Licenses, nil
-           }
+                  // Return licenses if available
+                  if len(pom.Licenses) > 0 {
+                          return pom.Licenses, nil
+                  }
 
-           // If no licenses found, check parent POM
-           if pom.Parent.GroupID!= "" && pom.Parent.ArtifactID!= "" && pom.Parent.Version!= "" {
-            return retrieveLicenseInfo(pom.Parent.GroupID, pom.Parent.ArtifactID, pom.Parent.Version)
-           }
+                  // If no licenses found, check parent POM
+                  if pom.Parent.GroupID!= "" && pom.Parent.ArtifactID!= "" && pom.Parent.Version!= "" {
+                          return retrieveLicenseInfo(pom.Parent.GroupID, pom.Parent.ArtifactID, pom.Parent.Version)
+                  }
 
-           return nil, fmt.Errorf("no license information found for %s:%s:%s", groupID, artifactID, version)
+                  return nil, fmt.Errorf("no license information found for %s:%s:%s", groupID, artifactID, version)
           }
 
           // Parse a single TOML file to extract dependencies
           func parseTOMLFile(filePath string) (map[string]string, error) {
-           dependencies:= make(map[string]string)
+                  dependencies:= make(map[string]string)
 
-           // Load TOML file
-           tree, err:= toml.LoadFile(filePath)
-           if err!= nil {
-            return nil, fmt.Errorf("error loading TOML file: %v", err)
-           }
+                  // Load TOML file
+                  tree, err:= toml.LoadFile(filePath)
+                  if err!= nil {
+                          return nil, fmt.Errorf("error loading TOML file: %v", err)
+                  }
 
-           // Extract versions
-           versions:= make(map[string]string)
-           if versionTree:= tree.Get("versions"); versionTree!= nil {
-            for key, value:= range versionTree.(*toml.Tree).ToMap() {
-             versions[key] = value.(string)
-            }
-           }
+                  // Extract versions
+                  versions:= make(map[string]string)
+                  if versionTree:= tree.Get("versions"); versionTree!= nil {
+                          for key, value:= range versionTree.(*toml.Tree).ToMap() {
+                                  versions[key] = value.(string)
+                          }
+                  }
 
-           // Extract libraries and match with versions
-           if libraryTree:= tree.Get("libraries"); libraryTree!= nil {
-            for key, value:= range libraryTree.(*toml.Tree).ToMap() {
-             module:= value.(map[string]interface{})["module"].(string)
-             versionRef:= value.(map[string]interface{})["version.ref"].(string)
-             if version, exists:= versions[versionRef]; exists {
-              dependencies[module] = version
-             }
-            }
-           }
+                  // Extract libraries and match with versions
+                  if libraryTree:= tree.Get("libraries"); libraryTree!= nil {
+                          for key, value:= range libraryTree.(*toml.Tree).ToMap() {
+                                  module:= value.(map[string]interface{})["module"].(string)
+                                  versionRef:= value.(map[string]interface{})["version.ref"].(string)
+                                  if version, exists:= versions[versionRef]; exists {
+                                          dependencies[module] = version
+                                  }
+                          }
+                  }
 
-           return dependencies, nil
+                  return dependencies, nil
           }
 
           // Recursively find all TOML files in a directory
           func findTOMLFiles(rootDir string) (string, error) {
-           var tomlFilesstring
-           err:= filepath.WalkDir(rootDir, func(path string, d fs.DirEntry, err error) error {
-            if err!= nil {
-             return err
-            }
-            if!d.IsDir() && strings.HasSuffix(d.Name(), ".toml") {
-             tomlFiles = append(tomlFiles, path)
-            }
-            return nil
-           })
-           return tomlFiles, err
+                  var tomlFilesstring
+                  err:= filepath.WalkDir(rootDir, func(path string, d fs.DirEntry, err error) error {
+                          if err!= nil {
+                                  return err
+                          }
+                          if!d.IsDir() && strings.HasSuffix(d.Name(), ".toml") {
+                                  tomlFiles = append(tomlFiles, path)
+                          }
+                          return nil
+                  })
+                  return tomlFiles, err
           }
 
           // Generate an HTML report of dependencies and their licenses
           func generateHTMLReport(dependencies map[string]string) {
-           html:= `
-           <!DOCTYPE html>
-           <html>
-           <head>
-           <title>Kotlin Dependency License Check</title>
-           <style>
-            table { width: 100%; border-collapse: collapse; }
-            th, td { border: 1px solid black; padding: 8px; text-align: left; }
-          .copyleft { color: red; }
-          .permissive { color: green; }
-           </style>
-           </head>
-           <body>
-            <h1>Kotlin Dependency License Check</h1>
-            <table>
-             <thead>
-              <tr>
-               <th>Dependency</th>
-               <th>Version</th>
-               <th>License</th>
-              </tr>
-             </thead>
-             <tbody>`
+                  html:= `
+          <!DOCTYPE html>
+          <html>
+          <head>
+          <title>Kotlin Dependency License Check</title>
+          <style>
+           table { width: 100%; border-collapse: collapse; }
+           th, td { border: 1px solid black; padding: 8px; text-align: left; }
+         .copyleft { color: red; }
+         .permissive { color: green; }
+          </style>
+          </head>
+          <body>
+           <h1>Kotlin Dependency License Check</h1>
+           <table>
+            <thead>
+             <tr>
+              <th>Dependency</th>
+              <th>Version</th>
+              <th>License</th>
+             </tr>
+            </thead>
+            <tbody>`
 
-           for dep, version:= range dependencies {
-            licenses, err:= retrieveLicenseInfo(dep, "", version)
-            licenseInfo:= "Unknown"
-            licenseClass:= ""
-            if err!= nil {
-             // If there was an error, include the error message and a search link in the report
-             searchURL:= fmt.Sprintf("https://www.google.com/search?q=%s+%s+%s+maven+repository", dep, "", version)
-             licenseInfo = fmt.Sprintf("Error: %v <br> <a href='%s'>Try searching manually</a>", err, searchURL)
-            } else if len(licenses) > 0 {
-             licenseInfo = fmt.Sprintf("<a href='%s'>%s</a>", licenses.URL, licenses.Name)
-             if isCopyleft(licenses.Name, licenses.URL) {
-              licenseClass = "copyleft"
-             } else {
-              licenseClass = "permissive"
-             }
-            }
+                  for dep, version:= range dependencies {
+                          licenses, err:= retrieveLicenseInfo(dep, "", version)
+                          licenseInfo:= "Unknown"
+                          licenseClass:= ""
+                          if err!= nil {
+                                  // If there was an error, include the error message and a search link in the report
+                                  searchURL:= fmt.Sprintf("https://www.google.com/search?q=%s+%s+%s+maven+repository", dep, "", version)
+                                  licenseInfo = fmt.Sprintf("Error: %v <br> <a href='%s'>Try searching manually</a>", err, searchURL)
+                          } else if len(licenses) > 0 {
+                                  licenseInfo = fmt.Sprintf("<a href='%s'>%s</a>", licenses.URL, licenses.Name)
+                                  if isCopyleft(licenses.Name, licenses.URL) {
+                                          licenseClass = "copyleft"
+                                  } else {
+                                          licenseClass = "permissive"
+                                  }
+                          }
 
-            html += fmt.Sprintf(`
-              <tr>
-               <td>%s</td>
-               <td>%s</td>
-               <td class="%s">%s</td>
-              </tr>`, dep, version, licenseClass, licenseInfo)
-           }
+                          html += fmt.Sprintf(`
+             <tr>
+              <td>%s</td>
+              <td>%s</td>
+              <td class="%s">%s</td>
+             </tr>`, dep, version, licenseClass, licenseInfo)
+                  }
 
-           html += `
-             </tbody>
-            </table>
-           </body>
-           </html>`
+                  html += `
+            </tbody>
+           </table>
+          </body>
+          </html>`
 
-           err:= ioutil.WriteFile("license-report.html",byte(html), 0644)
-           if err!= nil {
-            fmt.Println("Error writing report:", err)
-           }
+                  err:= ioutil.WriteFile("license-report.html",byte(html), 0644)
+                  if err!= nil {
+                          fmt.Println("Error writing report:", err)
+                  }
           }
 
           func main() {
-           if len(os.Args) < 2 {
-            fmt.Println("Usage: license-checker <project_root>")
-            return
-           }
-           rootDir:= os.Args
+                  if len(os.Args) < 2 {
+                          fmt.Println("Usage: license-checker <project_root>")
+                          return
+                  }
+                  rootDir:= os.Args
 
-           tomlFiles, err:= findTOMLFiles(rootDir)
-           if err!= nil {
-            fmt.Println("Error finding TOML files:", err)
-            return
-           }
+                  tomlFiles, err:= findTOMLFiles(rootDir)
+                  if err!= nil {
+                          fmt.Println("Error finding TOML files:", err)
+                          return
+                  }
 
-           dependencies:= make(map[string]string)
-           for _, file:= range tomlFiles {
-            deps, err:= parseTOMLFile(file)
-            if err!= nil {
-             fmt.Println("Error parsing TOML file:", err)
-             continue // Continue with other files even if one fails
-            }
-            for k, v:= range deps {
-             dependencies[k] = v
-            }
-           }
+                  dependencies:= make(map[string]string)
+                  for _, file:= range tomlFiles {
+                          deps, err:= parseTOMLFile(file)
+                          if err!= nil {
+                                  fmt.Println("Error parsing TOML file:", err)
+                                  continue // Continue with other files even if one fails
+                          }
+                          for k, v:= range deps {
+                                  dependencies[k] = v
+                          }
+                  }
 
-           generateHTMLReport(dependencies)
-           fmt.Println("License report generated: license-report.html")
+                  generateHTMLReport(dependencies)
+                  fmt.Println("License report generated: license-report.html")
           }
           EOF
 
           go build -o license-checker license-checker.go
-           ./license-checker <path-to-your-project-root> 
+        ./license-checker.
 
       - name: Upload license report artifact (optional)
         uses: actions/upload-artifact@v4
