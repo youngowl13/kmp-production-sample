@@ -3,7 +3,7 @@ name: Kotlin Dependency License Check
 on:
   push:
     branches:
-      - master  # Or your main branch name
+      - main  # Or your main branch name
 
 jobs:
   check-licenses:
@@ -17,7 +17,12 @@ jobs:
           latest_go_version=$(curl -s https://go.dev/VERSION?m=text | sed 's/go//')
           echo "LATEST_GO_VERSION=${latest_go_version}" >> $GITHUB_ENV
 
-      - name: Build and run license checker
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ env.LATEST_GO_VERSION }}
+
+      - name: Build license checker
         run: |
           cat << EOF > license-checker.go
           package main
@@ -301,7 +306,7 @@ jobs:
           EOF
 
           go build -o kotlin-license-checker
-        ./kotlin-license-checker
+        ./kotlin-license-checker.
 
       - name: Upload license report artifact
         uses: actions/upload-artifact@v4
