@@ -15,12 +15,13 @@ jobs:
       - name: Check for TOML files
         id: check_toml
         run: |
-          if find . -type f -name "*.toml" -print -quit; then
+          if find . -type f -name "*.toml" -quit; then
             echo "toml_files_found=true" >> "$GITHUB_OUTPUT"
-          else:
+          else
             echo "toml_files_found=false" >> "$GITHUB_OUTPUT"
           fi
 
+      # Steps to set up Go and build the license checker (only if TOML files are found)
       - name: Determine latest Go version
         if: steps.check_toml.outputs.toml_files_found == 'true'
         id: get_go_version
@@ -330,6 +331,7 @@ jobs:
               </table>
             </body>
             </html>`
+
             // Write the HTML to license-report.html in the current directory (which is license-checker)
               err := ioutil.WriteFile("license-report.html", []byte(html), 0644)
               if err != nil {
@@ -339,7 +341,7 @@ jobs:
 
             func main() {
               rootDir := ".." // Set root directory to the parent (project root)
-              
+
               tomlFiles, err := findTOMLFiles(rootDir)
               if err != nil {
                 fmt.Println("Error finding TOML files:", err)
@@ -350,8 +352,8 @@ jobs:
               for _, file := range tomlFiles {
                 deps, err := parseTOMLFile(file)
                 if err != nil {
-                  fmt.Println("Error parsing TOML file:", file, err) 
-                  continue                                            
+                  fmt.Println("Error parsing TOML file:", file, err)
+                  continue
                 }
                 for k, v := range deps {
                   if _, exists := dependencies[k]; exists {
@@ -401,3 +403,14 @@ jobs:
         with:
           name: license-report
           path: license-checker/license-report.html
+
+      - name: Upload binary artifact
+        if: steps.check_toml.outputs.toml_files_found == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: kotlin-license-checker
+          path: license-checker/license-checker
+
+      - name: Skip if no TOML files found
+        if: steps.check_toml.outputs.toml_files_found == 'false'
+        run: echo "No TOML files found. Skipping license check."
