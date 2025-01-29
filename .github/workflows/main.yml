@@ -3,7 +3,7 @@ name: Kotlin Dependency License Check
 on:
   push:
     branches:
-      - master
+      - main
 
 jobs:
   check-licenses:
@@ -15,9 +15,9 @@ jobs:
       - name: Check for TOML files
         id: check_toml
         run: |
-          if find . -name "*.toml" -print -quit; then
+          if find . -type f -name "*.toml" -print -quit; then
             echo "toml_files_found=true" >> "$GITHUB_OUTPUT"
-          else
+          else:
             echo "toml_files_found=false" >> "$GITHUB_OUTPUT"
           fi
 
@@ -82,7 +82,7 @@ jobs:
           }
 
           type Parent struct {
-            GroupID    string `xml:"groupId"`
+            GroupID    string    `xml:"groupId"`
             ArtifactID string `xml:"artifactId"`
             Version    string `xml:"version"`
           }
@@ -339,8 +339,8 @@ jobs:
             }
 
             func main() {
-              rootDir := ".."
-              
+              rootDir := ".." // Set root directory to parent to search from the root of the project
+             
               tomlFiles, err := findTOMLFiles(rootDir)
               if err != nil {
                 fmt.Println("Error finding TOML files:", err)
@@ -351,8 +351,8 @@ jobs:
               for _, file := range tomlFiles {
                 deps, err := parseTOMLFile(file)
                 if err != nil {
-                  fmt.Println("Error parsing TOML file:", file, err) // Include filename for easier debugging
-                  continue                                            // Continue with other files even if one fails
+                  fmt.Println("Error parsing TOML file:", file, err) 
+                  continue                                            
                 }
                 for k, v := range deps {
                   if _, exists := dependencies[k]; exists {
