@@ -62,18 +62,18 @@ jobs:
           }
 
           func fetchLicense(group, name, version string) (string, string) {
-              // Try Maven Central
-              mavenURL := fmt.Sprintf("https://repo1.maven.org/maven2/%s/%s/%s/%s-%s.pom",
+              // Try Google Maven Repository first
+              googleMavenURL := fmt.Sprintf("https://dl.google.com/dl/android/maven2/%s/%s/%s/%s-%s.pom",
                   strings.ReplaceAll(group, ".", "/"), name, version, name, version)
-              license, url := getLicenseFromPom(mavenURL)
+              license, url := getLicenseFromPom(googleMavenURL)
               if license != "Unknown" {
                   return license, url
               }
 
-              // Try Google Maven Repository
-              googleMavenURL := fmt.Sprintf("https://dl.google.com/dl/android/maven2/%s/%s/%s/%s-%s.pom",
+              // Fallback to Maven Central
+              mavenURL := fmt.Sprintf("https://repo1.maven.org/maven2/%s/%s/%s/%s-%s.pom",
                   strings.ReplaceAll(group, ".", "/"), name, version, name, version)
-              license, url = getLicenseFromPom(googleMavenURL)
+              license, url = getLicenseFromPom(mavenURL)
               return license, url
           }
 
@@ -106,17 +106,28 @@ jobs:
           }
 
           func findFileRecursive(root string, target string) (string, error) {
+              fmt.Printf("Starting recursive search for %s in directory: %s\n", target, root)
+
               var foundFile string
               err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
                   if err != nil {
-                      return err
+                      fmt.Printf("Error accessing path %s: %v\n", path, err)
+                      return nil
                   }
+                  fmt.Printf("Checking file: %s\n", path) // Debug log
+
                   if strings.EqualFold(info.Name(), target) {
                       foundFile = path
-                      return filepath.SkipDir // Stop searching once the file is found
+                      fmt.Printf("Found file: %s\n", path) // Debug log
+                      return filepath.SkipDir // Stop further searching once the file is found
                   }
                   return nil
               })
+
+              if foundFile == "" {
+                  fmt.Printf("File %s not found in directory: %s\n", target, root) // Debug log
+                  return "", fmt.Errorf("file %s not found in directory %s", target, root)
+              }
               return foundFile, err
           }
 
@@ -127,6 +138,8 @@ jobs:
                   return nil
               }
 
+              fmt.Printf("Found dependency file at: %s\n", filePath)
+
               file, err := os.Open(filePath)
               if err != nil {
                   fmt.Printf("Error opening %s: %v\n", filePath, err)
@@ -136,13 +149,17 @@ jobs:
 
               dependencies := []Dependency{}
               scanner := bufio.NewScanner(file)
-              dependencyRegex := regexp.MustCompile(`(?P<Group>[^:]+):(?P<Name>[^:]+):(?P<Version>[^\s]+)`)
+              dependencyRegex := regexp.MustCompile(`module\s*=\s*"(?P<Group>[^:]+):(?P<Name>[^:]+)"(?:,|version\.ref\s*=\s*"[^"]+")`)
               for scanner.Scan() {
                   line := strings.TrimSpace(scanner.Text())
+                  fmt.Printf("Processing line: %s\n", line) // Debug log
+
                   if matches := dependencyRegex.FindStringSubmatch(line); matches != nil {
                       group := matches[1]
                       name := matches[2]
-                      version := matches[3]
+                      version := "Unknown" // Version extraction can be customized
+                      fmt.Printf("Parsed dependency - Group: %s, Name: %s, Version: %s\n", group, name, version)
+
                       license, details := fetchLicense(group, name, version)
                       dependencies = append(dependencies, Dependency{
                           Name:     fmt.Sprintf("%s:%s", group, name),
