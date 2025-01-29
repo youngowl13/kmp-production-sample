@@ -12,10 +12,15 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Determine latest Go version
+        run: |
+          latest_go_version=$(curl -s https://go.dev/VERSION?m=text | sed 's/go//')
+          echo "LATEST_GO_VERSION=${latest_go_version}" >> $GITHUB_ENV
+
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: 'latest' 
+          go-version: ${{ env.LATEST_GO_VERSION }}
 
       - name: Install dependencies
         run: go mod download
@@ -304,7 +309,7 @@ jobs:
           EOF
 
           go build -o license-checker license-checker.go
-          ./license-checker <path-to-your-project-root> 
+           ./license-checker <path-to-your-project-root> 
 
       - name: Upload license report artifact (optional)
         uses: actions/upload-artifact@v4
