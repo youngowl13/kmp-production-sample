@@ -67,6 +67,7 @@ jobs:
                   strings.ReplaceAll(group, ".", "/"), name, version, name, version)
               license, url := getLicenseFromPom(googleMavenURL)
               if license != "Unknown" {
+                  fmt.Printf("License found in Google Maven: %s (%s)\n", license, googleMavenURL)
                   return license, url
               }
 
@@ -74,6 +75,9 @@ jobs:
               mavenURL := fmt.Sprintf("https://repo1.maven.org/maven2/%s/%s/%s/%s-%s.pom",
                   strings.ReplaceAll(group, ".", "/"), name, version, name, version)
               license, url = getLicenseFromPom(mavenURL)
+              if license != "Unknown" {
+                  fmt.Printf("License found in Maven Central: %s (%s)\n", license, mavenURL)
+              }
               return license, url
           }
 
@@ -114,18 +118,18 @@ jobs:
                       fmt.Printf("Error accessing path %s: %v\n", path, err)
                       return nil
                   }
-                  fmt.Printf("Checking file: %s\n", path) // Debug log
+                  fmt.Printf("Checking file: %s\n", path)
 
                   if strings.EqualFold(info.Name(), target) {
                       foundFile = path
-                      fmt.Printf("Found file: %s\n", path) // Debug log
-                      return filepath.SkipDir // Stop further searching once the file is found
+                      fmt.Printf("Found file: %s\n", path)
+                      return filepath.SkipDir
                   }
                   return nil
               })
 
               if foundFile == "" {
-                  fmt.Printf("File %s not found in directory: %s\n", target, root) // Debug log
+                  fmt.Printf("File %s not found in directory: %s\n", target, root)
                   return "", fmt.Errorf("file %s not found in directory %s", target, root)
               }
               return foundFile, err
@@ -149,15 +153,19 @@ jobs:
 
               dependencies := []Dependency{}
               scanner := bufio.NewScanner(file)
-              dependencyRegex := regexp.MustCompile(`module\s*=\s*"(?P<Group>[^:]+):(?P<Name>[^:]+)"(?:,|version\.ref\s*=\s*"[^"]+")`)
+              dependencyRegex := regexp.MustCompile(`module\s*=\s*"(?P<Group>[^:]+):(?P<Name>[^:]+)"(?:,|version\.ref\s*=\s*"(?P<Version>[^"]+)")`)
               for scanner.Scan() {
                   line := strings.TrimSpace(scanner.Text())
-                  fmt.Printf("Processing line: %s\n", line) // Debug log
+                  fmt.Printf("Processing line: %s\n", line)
 
-                  if matches := dependencyRegex.FindStringSubmatch(line); matches != nil {
+                  matches := dependencyRegex.FindStringSubmatch(line)
+                  if matches != nil {
                       group := matches[1]
                       name := matches[2]
-                      version := "Unknown" // Version extraction can be customized
+                      version := matches[3]
+                      if version == "" {
+                          version = "Unknown"
+                      }
                       fmt.Printf("Parsed dependency - Group: %s, Name: %s, Version: %s\n", group, name, version)
 
                       license, details := fetchLicense(group, name, version)
@@ -209,8 +217,8 @@ jobs:
           }
 
           func main() {
-              rootDir := "../"             // Root directory to search
-              targetFile := "libs.versions.toml" // Target file to find
+              rootDir := "../"
+              targetFile := "libs.versions.toml"
               dependencies := parseKotlinDependencies(rootDir, targetFile)
               generateHTMLReport(dependencies)
               fmt.Println("Dependency license report generated: dependency-license-report.html")
