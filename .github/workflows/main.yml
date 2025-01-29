@@ -17,7 +17,7 @@ jobs:
         run: |
           if find . -name "*.toml" -print -quit; then
             echo "toml_files_found=true" >> "$GITHUB_OUTPUT"
-          else:
+          else
             echo "toml_files_found=false" >> "$GITHUB_OUTPUT"
           fi
 
@@ -382,13 +382,10 @@ jobs:
           EOF
 
           # Initialize Go module, build, and run from within license-checker directory
-          cd license-checker && go mod init license-checker
+          (cd license-checker && go mod init license-checker)
           
           # Build the license checker
-          if ! go build -o license-checker; then
-            echo "Error: Failed to build license-checker"
-            exit 1
-          fi
+          (cd license-checker && go build -o license-checker)
 
           # Navigate back to the root directory
           cd ..
