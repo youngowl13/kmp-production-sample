@@ -12,34 +12,21 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Check for TOML files
-        id: check_toml
-        run: |
-          if find . -type f -name "*.toml" -print -quit; then
-            echo "toml_files_found=true" >> "$GITHUB_OUTPUT"
-          else:
-            echo "toml_files_found=false" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Determine latest Go version
-        if: steps.check_toml.outputs.toml_files_found == 'true'
         id: get_go_version
         run: |
           latest_go_version=$(curl -s https://go.dev/VERSION?m=text | sed 's/^go//' | head -n 1)
           echo "go-version=$latest_go_version" >> "$GITHUB_OUTPUT"
 
       - name: Set up Go
-        if: steps.check_toml.outputs.toml_files_found == 'true'
         uses: actions/setup-go@v4
         with:
           go-version: ${{ steps.get_go_version.outputs.go-version }}
 
       - name: Create license checker directory
-        if: steps.check_toml.outputs.toml_files_found == 'true'
         run: mkdir -p license-checker
 
       - name: Build and run license checker
-        if: steps.check_toml.outputs.toml_files_found == 'true'
         shell: bash
         run: |
           # Navigate into the license-checker directory
@@ -259,7 +246,7 @@ jobs:
             return dependencies, nil
           }
 
-          # Recursively find all TOML files in a directory
+          // Recursively find all TOML files in a directory
           func findTOMLFiles(rootDir string) ([]string, error) {
             var tomlFiles []string
             err := filepath.WalkDir(rootDir, func(path string, d fs.DirEntry, err error) error {
@@ -274,7 +261,7 @@ jobs:
             return tomlFiles, err
           }
 
-          # Generate an HTML report of dependencies and their licenses
+          // Generate an HTML report of dependencies and their licenses
           func generateHTMLReport(dependencies map[string]string) {
             html := `
           <!DOCTYPE html>
@@ -339,13 +326,21 @@ jobs:
             }
 
             func main() {
-              rootDir := ".." // Set root directory to the parent (project root)
-
-              tomlFiles, err := findTOMLFiles(rootDir)
-              if err != nil {
-                fmt.Println("Error finding TOML files:", err)
-                return
-              }
+                // Set root directory to the root of the checked-out project
+                rootDir := ".."
+                
+                // Check for existence of TOML files
+                tomlFiles, err := findTOMLFiles(rootDir)
+                if err != nil {
+                  fmt.Println("Error finding TOML files:", err)
+                  return
+                }
+            
+                // If no TOML files are found, exit
+                if len(tomlFiles) == 0 {
+                  fmt.Println("No TOML files found in the project. Exiting.")
+                  return
+                }
 
               dependencies := make(map[string]string)
               for _, file := range tomlFiles {
