@@ -3,7 +3,7 @@ name: Kotlin Dependency License Check
 on:
   push:
     branches:
-      - master
+      - main
   pull_request:
     branches:
       - main
@@ -33,6 +33,7 @@ jobs:
 
           import (
               "bufio"
+              "encoding/json"
               "fmt"
               "net/http"
               "os"
@@ -61,23 +62,62 @@ jobs:
               return false
           }
 
+          func parseTOMLFile(filePath string) (map[string]string, []Dependency) {
+              file, err := os.Open(filePath)
+              if err != nil {
+                  fmt.Printf("Error opening TOML file: %v\n", err)
+                  return nil, nil
+              }
+              defer file.Close()
+
+              versions := make(map[string]string)
+              dependencies := []Dependency{}
+
+              scanner := bufio.NewScanner(file)
+              currentSection := ""
+              dependencyRegex := regexp.MustCompile(`module\s*=\s*"(?P<Group>[^:]+):(?P<Name>[^:]+)"(?:,|version\.ref\s*=\s*"(?P<VersionRef>[^"]+)")`)
+
+              for scanner.Scan() {
+                  line := strings.TrimSpace(scanner.Text())
+                  if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
+                      currentSection = strings.Trim(line, "[]")
+                  }
+
+                  if currentSection == "versions" {
+                      parts := strings.SplitN(line, "=", 2)
+                      if len(parts) == 2 {
+                          versions[strings.TrimSpace(parts[0])] = strings.Trim(strings.TrimSpace(parts[1]), `"`)
+                      }
+                  }
+
+                  if currentSection == "libraries" {
+                      matches := dependencyRegex.FindStringSubmatch(line)
+                      if matches != nil {
+                          group := matches[1]
+                          name := matches[2]
+                          versionRef := matches[3]
+                          version := versions[versionRef]
+                          dependencies = append(dependencies, Dependency{
+                              Name:    fmt.Sprintf("%s:%s", group, name),
+                              Version: version,
+                          })
+                      }
+                  }
+              }
+              return versions, dependencies
+          }
+
           func fetchLicense(group, name, version string) (string, string) {
-              // Try Google Maven Repository first
               googleMavenURL := fmt.Sprintf("https://dl.google.com/dl/android/maven2/%s/%s/%s/%s-%s.pom",
                   strings.ReplaceAll(group, ".", "/"), name, version, name, version)
               license, url := getLicenseFromPom(googleMavenURL)
               if license != "Unknown" {
-                  fmt.Printf("License found in Google Maven: %s (%s)\n", license, googleMavenURL)
                   return license, url
               }
 
-              // Fallback to Maven Central
-              mavenURL := fmt.Sprintf("https://repo1.maven.org/maven2/%s/%s/%s/%s-%s.pom",
+              mavenCentralURL := fmt.Sprintf("https://repo1.maven.org/maven2/%s/%s/%s/%s-%s.pom",
                   strings.ReplaceAll(group, ".", "/"), name, version, name, version)
-              license, url = getLicenseFromPom(mavenURL)
-              if license != "Unknown" {
-                  fmt.Printf("License found in Maven Central: %s (%s)\n", license, mavenURL)
-              }
+              license, url = getLicenseFromPom(mavenCentralURL)
               return license, url
           }
 
@@ -93,92 +133,15 @@ jobs:
               for scanner.Scan() {
                   line := scanner.Text()
                   if strings.Contains(line, "<license>") || strings.Contains(line, "<licenses>") {
-                      license = extractLicense(line)
+                      licenseRegex := regexp.MustCompile(`<name>(.*?)</name>`)
+                      matches := licenseRegex.FindStringSubmatch(line)
+                      if len(matches) > 1 {
+                          license = matches[1]
+                      }
                       break
                   }
               }
               return license, url
-          }
-
-          func extractLicense(line string) string {
-              licenseRegex := regexp.MustCompile(`<name>(.*?)</name>`)
-              matches := licenseRegex.FindStringSubmatch(line)
-              if len(matches) > 1 {
-                  return matches[1]
-              }
-              return "Unknown"
-          }
-
-          func findFileRecursive(root string, target string) (string, error) {
-              fmt.Printf("Starting recursive search for %s in directory: %s\n", target, root)
-
-              var foundFile string
-              err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
-                  if err != nil {
-                      fmt.Printf("Error accessing path %s: %v\n", path, err)
-                      return nil
-                  }
-                  fmt.Printf("Checking file: %s\n", path)
-
-                  if strings.EqualFold(info.Name(), target) {
-                      foundFile = path
-                      fmt.Printf("Found file: %s\n", path)
-                      return filepath.SkipDir
-                  }
-                  return nil
-              })
-
-              if foundFile == "" {
-                  fmt.Printf("File %s not found in directory: %s\n", target, root)
-                  return "", fmt.Errorf("file %s not found in directory %s", target, root)
-              }
-              return foundFile, err
-          }
-
-          func parseKotlinDependencies(rootDir string, targetFile string) []Dependency {
-              filePath, err := findFileRecursive(rootDir, targetFile)
-              if err != nil || filePath == "" {
-                  fmt.Printf("Error finding %s: %v\n", targetFile, err)
-                  return nil
-              }
-
-              fmt.Printf("Found dependency file at: %s\n", filePath)
-
-              file, err := os.Open(filePath)
-              if err != nil {
-                  fmt.Printf("Error opening %s: %v\n", filePath, err)
-                  return nil
-              }
-              defer file.Close()
-
-              dependencies := []Dependency{}
-              scanner := bufio.NewScanner(file)
-              dependencyRegex := regexp.MustCompile(`module\s*=\s*"(?P<Group>[^:]+):(?P<Name>[^:]+)"(?:,|version\.ref\s*=\s*"(?P<Version>[^"]+)")`)
-              for scanner.Scan() {
-                  line := strings.TrimSpace(scanner.Text())
-                  fmt.Printf("Processing line: %s\n", line)
-
-                  matches := dependencyRegex.FindStringSubmatch(line)
-                  if matches != nil {
-                      group := matches[1]
-                      name := matches[2]
-                      version := matches[3]
-                      if version == "" {
-                          version = "Unknown"
-                      }
-                      fmt.Printf("Parsed dependency - Group: %s, Name: %s, Version: %s\n", group, name, version)
-
-                      license, details := fetchLicense(group, name, version)
-                      dependencies = append(dependencies, Dependency{
-                          Name:     fmt.Sprintf("%s:%s", group, name),
-                          Version:  version,
-                          License:  license,
-                          Details:  details,
-                          Copyleft: isCopyleftLicense(license),
-                      })
-                  }
-              }
-              return dependencies
           }
 
           func generateHTMLReport(dependencies []Dependency) {
@@ -219,7 +182,16 @@ jobs:
           func main() {
               rootDir := "../"
               targetFile := "libs.versions.toml"
-              dependencies := parseKotlinDependencies(rootDir, targetFile)
+
+              _, dependencies := parseTOMLFile(targetFile)
+              for i, dep := range dependencies {
+                  group, name := strings.Split(dep.Name, ":")[0], strings.Split(dep.Name, ":")[1]
+                  license, details := fetchLicense(group, name, dep.Version)
+                  dependencies[i].License = license
+                  dependencies[i].Details = details
+                  dependencies[i].Copyleft = isCopyleftLicense(license)
+              }
+
               generateHTMLReport(dependencies)
               fmt.Println("Dependency license report generated: dependency-license-report.html")
           }
