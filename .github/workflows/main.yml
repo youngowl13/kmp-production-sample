@@ -17,10 +17,11 @@ jobs:
         run: |
           if find . -name "*.toml" -print -quit; then
             echo "toml_files_found=true" >> "$GITHUB_OUTPUT"
-          else
+          else:
             echo "toml_files_found=false" >> "$GITHUB_OUTPUT"
           fi
 
+      # Steps to set up Go and build the license checker (only if TOML files are found)
       - name: Determine latest Go version
         if: steps.check_toml.outputs.toml_files_found == 'true'
         id: get_go_version
@@ -34,10 +35,18 @@ jobs:
         with:
           go-version: ${{ steps.get_go_version.outputs.go-version }}
 
+      - name: Create license checker directory
+        if: steps.check_toml.outputs.toml_files_found == 'true'
+        run: mkdir -p license-checker
+
       - name: Build and run license checker
         if: steps.check_toml.outputs.toml_files_found == 'true'
         shell: bash
         run: |
+          # Navigate into the license-checker directory
+          cd license-checker
+
+          # Create license-checker.go inside the license-checker directory
           cat <<-'EOF' > license-checker.go
           package main
 
@@ -323,19 +332,15 @@ jobs:
             </body>
             </html>`
 
-              err := ioutil.WriteFile("license-report.html", []byte(html), 0644)
+              err := ioutil.WriteFile(filepath.Join("..","license-report.html"), []byte(html), 0644)
               if err != nil {
                 fmt.Println("Error writing report:", err)
               }
             }
 
             func main() {
-              if len(os.Args) < 2 {
-                fmt.Println("Usage: license-checker <project_root>")
-                return
-              }
-              rootDir := os.Args[1]
-
+              rootDir := ".."
+              
               tomlFiles, err := findTOMLFiles(rootDir)
               if err != nil {
                 fmt.Println("Error finding TOML files:", err)
@@ -375,14 +380,22 @@ jobs:
             }
 
           EOF
-          # The indentation before EOF is important when using <<-EOF
-          # Build and run in a single run block
-          if ! go build -o kotlin-license-checker; then
-            echo "Error: Failed to build kotlin-license-checker"
+
+          # Initialize Go module, build, and run from within license-checker directory
+          cd license-checker && go mod init license-checker
+          
+          # Build the license checker
+          if ! go build -o license-checker; then
+            echo "Error: Failed to build license-checker"
             exit 1
           fi
-          if ! ./kotlin-license-checker .; then
-            echo "Error: kotlin-license-checker found copyleft licenses or encountered an error"
+
+          # Navigate back to the root directory
+          cd ..
+
+          # Run the license checker from the root directory
+          if ! ./license-checker/license-checker; then
+            echo "Error: license-checker found copyleft licenses or encountered an error"
             exit 1
           fi
 
@@ -398,7 +411,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: kotlin-license-checker
-          path: kotlin-license-checker
+          path: license-checker/license-checker
 
       - name: Skip if no TOML files found
         if: steps.check_toml.outputs.toml_files_found == 'false'
