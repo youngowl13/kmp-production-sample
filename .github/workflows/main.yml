@@ -3,7 +3,7 @@ name: Kotlin Dependency License Check
 on:
   push:
     branches:
-      - master
+      - main
 
 jobs:
   check-licenses:
@@ -12,11 +12,18 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Determine latest Go version
+        id: get_go_version
+        run: |
+          latest_go_version=$(curl -s https://go.dev/VERSION?m=text | sed 's/go//')
+          # Correctly set the output variable name as 'go-version'
+          echo "go-version=$latest_go_version" >> "$GITHUB_OUTPUT"
+
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          # Directly get the latest Go version in this step
-          go-version: $(curl -s https://go.dev/VERSION?m=text | sed 's/go//')
+          # Use the 'go-version' output from the previous step
+          go-version: ${{ steps.get_go_version.outputs.go-version }}
 
       - name: Build and run license checker
         shell: bash
