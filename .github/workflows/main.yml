@@ -15,8 +15,8 @@ jobs:
       - name: Determine latest Go version
         id: get_go_version
         run: |
-          latest_go_version=$(curl -s https://go.dev/VERSION?m=text | sed 's/go//')
-          # Correctly set the output variable name as 'go-version'
+          # Fetch the version, remove the 'go' prefix, and take only the first line
+          latest_go_version=$(curl -s https://go.dev/VERSION?m=text | sed 's/^go//' | head -n 1)
           echo "go-version=$latest_go_version" >> "$GITHUB_OUTPUT"
 
       - name: Set up Go
