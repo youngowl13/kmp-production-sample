@@ -12,17 +12,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Determine latest Go version
-        id: get_go_version # Added an ID to this step
-        run: |
-          latest_go_version=$(curl -s https://go.dev/VERSION?m=text | sed 's/go//')
-          echo "go_version=$latest_go_version" >> "$GITHUB_OUTPUT" # Correct way
-
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          # Use the output from the previous step
-          go-version: ${{ steps.get_go_version.outputs.go_version }}
+          # Directly get the latest Go version in this step
+          go-version: $(curl -s https://go.dev/VERSION?m=text | sed 's/go//')
 
       - name: Build and run license checker
         shell: bash
