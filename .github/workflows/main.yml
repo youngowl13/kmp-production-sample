@@ -3,7 +3,7 @@ name: Kotlin Dependency License Check
 on:
   push:
     branches:
-      - master
+      - main
   pull_request:
     branches:
       - main
@@ -33,7 +33,6 @@ jobs:
 
           import (
               "bufio"
-              "encoding/json"
               "fmt"
               "net/http"
               "os"
