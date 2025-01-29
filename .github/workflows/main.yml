@@ -27,7 +27,8 @@ jobs:
           #   **/go.sum
           #   **/go.mod
 
-      - name: Build license checker
+      - name: Build and run license checker
+        shell: bash
         run: |
           cat << EOF > license-checker.go
           package main
@@ -48,7 +49,7 @@ jobs:
             "github.com/PuerkitoBio/goquery"
           )
 
-          // Structs to parse POM XML
+          # Structs to parse POM XML
           type MavenPOM struct {
             XMLName    xml.Name  `xml:"project"`
             GroupID    string    `xml:"groupId"`
@@ -69,7 +70,7 @@ jobs:
             Version    string `xml:"version"`
           }
 
-          // Fetch POM file from a given URL with retry and redirect handling
+          # Fetch POM file from a given URL with retry and redirect handling
           func fetchPOM(url string) ([]byte, error) {
             client := &http.Client{
               Timeout: 10 * time.Second, // Set a timeout
@@ -114,27 +115,27 @@ jobs:
             return nil, fmt.Errorf("failed to fetch POM after retries: %v", err)
           }
 
-          // Parse POM XML data
+          # Parse POM XML data
           func parsePOM(data []byte) (MavenPOM, error) {
             var pom MavenPOM
             err := xml.Unmarshal(data, &pom)
             return pom, err
           }
 
-          // Construct POM URL based on repository base URL and artifact coordinates
+          # Construct POM URL based on repository base URL and artifact coordinates
           func constructPOMURL(repoBaseURL, groupID, artifactID, version string) string {
             groupPath := strings.ReplaceAll(groupID, ".", "/")
             return fmt.Sprintf("%s/%s/%s/%s/%s-%s.pom", repoBaseURL, groupPath, artifactID, version, artifactID, version)
           }
 
-          // copyleftKeywords contains keywords commonly associated with copyleft licenses
+          # copyleftKeywords contains keywords commonly associated with copyleft licenses
           var copyleftKeywords = []string{
             "gpl", "gnu general public license", "lgpl", "gnu lesser general public license", "agpl", "gnu affero general public license",
             "mozilla public license", "mpl", "common development and distribution license", "cddl", "eclipse public license", "epl",
             "GPL-2.0", "LGPL-3.0", "MPL-2.0", // More specific license names
           }
 
-          // isCopyleft checks if a license name or URL indicates a copyleft license
+          # isCopyleft checks if a license name or URL indicates a copyleft license
           func isCopyleft(licenseName, licenseURL string) bool {
             licenseName = strings.ToLower(licenseName)
             licenseURL = strings.ToLower(licenseURL)
@@ -145,7 +146,7 @@ jobs:
             }
             return false
           }
-          // searchOnline performs a web search for the Maven repository
+          # searchOnline performs a web search for the Maven repository
           func searchOnline(groupID, artifactID, version string) (License, error) {
           	fmt.Printf("Failed to fetch POM for %s:%s:%s from known repositories. Trying web search...\n", groupID, artifactID, version)
           	searchURL := fmt.Sprintf("https://www.google.com/search?q=%s+%s+%s+maven+repository", groupID, artifactID, version)
@@ -183,7 +184,7 @@ jobs:
           	return pom.Licenses, nil
           }
 
-          // Retrieve license information for a given artifact
+          # Retrieve license information for a given artifact
           func retrieveLicenseInfo(groupID, artifactID, version string) (License, error) {
             mavenCentralURL := "https://repo1.maven.org/maven2"
             googleMavenURL := "https://dl.google.com/dl/android/maven2"
@@ -210,7 +211,7 @@ jobs:
             return searchOnline(groupID, artifactID, version)
           }
 
-          // Parse a single TOML file to extract dependencies
+          # Parse a single TOML file to extract dependencies
           func parseTOMLFile(filePath string) (map[string]string, error) {
             dependencies := make(map[string]string)
 
@@ -242,7 +243,7 @@ jobs:
             return dependencies, nil
           }
 
-          // Recursively find all TOML files in a directory
+          # Recursively find all TOML files in a directory
           func findTOMLFiles(rootDir string) ([]string, error) {
             var tomlFiles []string
             err := filepath.WalkDir(rootDir, func(path string, d fs.DirEntry, err error) error {
@@ -257,7 +258,7 @@ jobs:
             return tomlFiles, err
           }
 
-          // Generate an HTML report of dependencies and their licenses
+          # Generate an HTML report of dependencies and their licenses
           func generateHTMLReport(dependencies map[string]string) {
             html := `
           <!DOCTYPE html>
@@ -366,11 +367,7 @@ jobs:
           }
 
           EOF
-
-          go build -o kotlin-license-checker
-        # Handle potential errors during build and execution
-        shell: bash
-        run: |
+          # Build and run in a single run block
           if ! go build -o kotlin-license-checker; then
             echo "Error: Failed to build kotlin-license-checker"
             exit 1
