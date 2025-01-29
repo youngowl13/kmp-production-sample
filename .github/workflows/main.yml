@@ -12,20 +12,32 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Check for TOML files
+        id: check_toml
+        run: |
+          # Find all .toml files recursively
+          find . -name "*.toml" -print0 | xargs -0 ls -l
+          if find . -name "*.toml" -print -quit; then
+            echo "toml_files_found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "toml_files_found=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Determine latest Go version
+        if: steps.check_toml.outputs.toml_files_found == 'true'
         id: get_go_version
         run: |
-          # Fetch the version, remove the 'go' prefix, and take only the first line
           latest_go_version=$(curl -s https://go.dev/VERSION?m=text | sed 's/^go//' | head -n 1)
           echo "go-version=$latest_go_version" >> "$GITHUB_OUTPUT"
 
       - name: Set up Go
+        if: steps.check_toml.outputs.toml_files_found == 'true'
         uses: actions/setup-go@v4
         with:
-          # Use the 'go-version' output from the previous step
           go-version: ${{ steps.get_go_version.outputs.go-version }}
 
       - name: Build and run license checker
+        if: steps.check_toml.outputs.toml_files_found == 'true'
         shell: bash
         run: |
           cat << EOF > license-checker.go
@@ -376,15 +388,19 @@ jobs:
           fi
 
       - name: Upload license report artifact
+        if: steps.check_toml.outputs.toml_files_found == 'true'
         uses: actions/upload-artifact@v4
-        if: always()
         with:
           name: license-report
           path: license-report.html
 
       - name: Upload binary artifact
+        if: steps.check_toml.outputs.toml_files_found == 'true'
         uses: actions/upload-artifact@v4
-        if: always()
         with:
           name: kotlin-license-checker
           path: kotlin-license-checker
+
+      - name: Skip if no TOML files found
+        if: steps.check_toml.outputs.toml_files_found == 'false'
+        run: echo "No TOML files found. Skipping license check."
