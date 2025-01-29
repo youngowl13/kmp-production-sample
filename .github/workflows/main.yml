@@ -1,4 +1,4 @@
-name: Kotlin Dependency License Check
+name: License Information Extraction
 
 on:
   push:
@@ -7,202 +7,151 @@ on:
   pull_request:
     branches:
       - main
+  workflow_dispatch:
 
 jobs:
-  license-check:
+  java-license-info:
     runs-on: ubuntu-latest
-
     steps:
-      # Step 1: Checkout Repository
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # Step 2: Setup Go
-      - name: Setup Go
+      - name: Set Up Java Environment
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '11'
+
+      - name: Generate Java License Information
+        uses: YunaBraska/maven-license-info-action@2.0.31
+        with:
+          work-dir: '.'
+          exclude-scopes: 'test,provided,system'
+          fail-license-regex: 'GPL'
+          null-to-empty: 'true'
+
+      - name: Upload Java License Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: java-license-report
+          path: ./target/generated-sources/license
+
+  go-license-info:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set Up Go Environment
         uses: actions/setup-go@v4
         with:
           go-version: '1.20'
 
-      # Step 3: Create and Run Kotlin Dependency License Checker
-      - name: Run Kotlin Dependency License Checker
+      - name: Install Dependencies
         run: |
           mkdir -p license-checker
+          cd license-checker
+          go mod init license-checker
+          go get github.com/pelletier/go-toml
+          go mod tidy
+
+      - name: Run Go-Based License Extractor
+        run: |
           cd license-checker
           cat << 'EOF' > main.go
           package main
 
           import (
-              "bufio"
-              "encoding/json"
+              "encoding/xml"
               "fmt"
+              "io/fs"
+              "io/ioutil"
               "net/http"
               "os"
               "path/filepath"
-              "regexp"
               "strings"
+              "github.com/pelletier/go-toml"
           )
 
-          type Dependency struct {
-              Name     string
-              Version  string
-              License  string
-              Details  string
-              Copyleft bool
+          // Structs for parsing POM XML
+          type MavenPOM struct {
+              XMLName    xml.Name  `xml:"project"`
+              GroupID    string    `xml:"groupId"`
+              ArtifactID string    `xml:"artifactId"`
+              Version    string    `xml:"version"`
+              Licenses   []License `xml:"licenses>license"`
+              Parent     Parent    `xml:"parent"`
           }
 
-          var copyleftLicenses = []string{"GPL", "LGPL", "AGPL", "MPL", "CC-BY-SA", "EPL", "OFL", "CPL", "OSL", "APL"}
-
-          func isCopyleftLicense(license string) bool {
-              license = strings.ToUpper(license)
-              for _, copyleft := range copyleftLicenses {
-                  if strings.Contains(license, copyleft) {
-                      return true
-                  }
-              }
-              return false
+          type License struct {
+              Name string `xml:"name"`
+              URL  string `xml:"url"`
           }
 
-          func parseTOMLFile(filePath string) (map[string]string, []Dependency) {
-              file, err := os.Open(filePath)
-              if err != nil {
-                  fmt.Printf("Error opening TOML file: %v\n", err)
-                  return nil, nil
-              }
-              defer file.Close()
-
-              versions := make(map[string]string)
-              dependencies := []Dependency{}
-
-              scanner := bufio.NewScanner(file)
-              currentSection := ""
-              dependencyRegex := regexp.MustCompile(`module\s*=\s*"(?P<Group>[^:]+):(?P<Name>[^:]+)"(?:,|version\.ref\s*=\s*"(?P<VersionRef>[^"]+)")`)
-
-              for scanner.Scan() {
-                  line := strings.TrimSpace(scanner.Text())
-                  if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
-                      currentSection = strings.Trim(line, "[]")
-                  }
-
-                  if currentSection == "versions" {
-                      parts := strings.SplitN(line, "=", 2)
-                      if len(parts) == 2 {
-                          versions[strings.TrimSpace(parts[0])] = strings.Trim(strings.TrimSpace(parts[1]), `"`)
-                      }
-                  }
-
-                  if currentSection == "libraries" {
-                      matches := dependencyRegex.FindStringSubmatch(line)
-                      if matches != nil {
-                          group := matches[1]
-                          name := matches[2]
-                          versionRef := matches[3]
-                          version := versions[versionRef]
-                          dependencies = append(dependencies, Dependency{
-                              Name:    fmt.Sprintf("%s:%s", group, name),
-                              Version: version,
-                          })
-                      }
-                  }
-              }
-              return versions, dependencies
+          type Parent struct {
+              GroupID    string `xml:"groupId"`
+              ArtifactID string `xml:"artifactId"`
+              Version    string `xml:"version"`
           }
 
-          func fetchLicense(group, name, version string) (string, string) {
-              googleMavenURL := fmt.Sprintf("https://dl.google.com/dl/android/maven2/%s/%s/%s/%s-%s.pom",
-                  strings.ReplaceAll(group, ".", "/"), name, version, name, version)
-              license, url := getLicenseFromPom(googleMavenURL)
-              if license != "Unknown" {
-                  return license, url
-              }
-
-              mavenCentralURL := fmt.Sprintf("https://repo1.maven.org/maven2/%s/%s/%s/%s-%s.pom",
-                  strings.ReplaceAll(group, ".", "/"), name, version, name, version)
-              license, url = getLicenseFromPom(mavenCentralURL)
-              return license, url
-          }
-
-          func getLicenseFromPom(url string) (string, string) {
+          func fetchPOM(url string) ([]byte, error) {
               resp, err := http.Get(url)
-              if err != nil || resp.StatusCode != 200 {
-                  return "Unknown", url
+              if err != nil {
+                  return nil, err
               }
               defer resp.Body.Close()
-
-              scanner := bufio.NewScanner(resp.Body)
-              license := "Unknown"
-              for scanner.Scan() {
-                  line := scanner.Text()
-                  if strings.Contains(line, "<license>") || strings.Contains(line, "<licenses>") {
-                      licenseRegex := regexp.MustCompile(`<name>(.*?)</name>`)
-                      matches := licenseRegex.FindStringSubmatch(line)
-                      if len(matches) > 1 {
-                          license = matches[1]
-                      }
-                      break
-                  }
-              }
-              return license, url
+              return ioutil.ReadAll(resp.Body)
           }
 
-          func generateHTMLReport(dependencies []Dependency) {
-              html := `
-              <!DOCTYPE html>
-              <html>
-              <head>
-                  <title>Kotlin Dependency License Report</title>
-                  <style>
-                      table { width: 100%; border-collapse: collapse; }
-                      th, td { border: 1px solid #ddd; padding: 8px; }
-                      th { background-color: #f2f2f2; }
-                      .copyleft { background-color: #f8d7da; color: #721c24; }
-                      .non-copyleft { background-color: #d4edda; color: #155724; }
-                  </style>
-              </head>
-              <body>
-                  <h1>Kotlin Dependency License Report</h1>
-                  <table>
-                      <tr><th>Package</th><th>Version</th><th>License</th><th>Details</th></tr>`
+          func parsePOM(data []byte) (MavenPOM, error) {
+              var pom MavenPOM
+              err := xml.Unmarshal(data, &pom)
+              return pom, err
+          }
 
-              for _, dep := range dependencies {
-                  class := "non-copyleft"
-                  if dep.Copyleft {
-                      class = "copyleft"
+          func constructPOMURL(repoBaseURL, groupID, artifactID, version string) string {
+              groupPath := strings.ReplaceAll(groupID, ".", "/")
+              return fmt.Sprintf("%s/%s/%s/%s/%s-%s.pom", repoBaseURL, groupPath, artifactID, version, artifactID, version)
+          }
+
+          func retrieveLicenseInfo(groupID, artifactID, version string) ([]License, error) {
+              mavenCentralURL := "https://repo1.maven.org/maven2"
+              googleMavenURL := "https://dl.google.com/dl/android/maven2"
+
+              url := constructPOMURL(mavenCentralURL, groupID, artifactID, version)
+              data, err := fetchPOM(url)
+              if err != nil {
+                  url = constructPOMURL(googleMavenURL, groupID, artifactID, version)
+                  data, err = fetchPOM(url)
+                  if err != nil {
+                      return nil, fmt.Errorf("failed to fetch POM: %v", err)
                   }
-                  html += fmt.Sprintf(`<tr class="%s"><td>%s</td><td>%s</td><td>%s</td><td><a href="%s" target="_blank">Details</a></td></tr>`, class, dep.Name, dep.Version, dep.License, dep.Details)
               }
 
-              html += `
-                  </table>
-              </body>
-              </html>`
+              pom, err := parsePOM(data)
+              if err != nil {
+                  return nil, err
+              }
 
-              os.WriteFile("dependency-license-report.html", []byte(html), 0644)
+              if len(pom.Licenses) > 0 {
+                  return pom.Licenses, nil
+              }
+
+              if pom.Parent.GroupID != "" && pom.Parent.ArtifactID != "" && pom.Parent.Version != "" {
+                  return retrieveLicenseInfo(pom.Parent.GroupID, pom.Parent.ArtifactID, pom.Parent.Version)
+              }
+
+              return nil, fmt.Errorf("no license information found for %s:%s:%s", groupID, artifactID, version)
           }
 
           func main() {
-              rootDir := "../"
-              targetFile := "libs.versions.toml"
-
-              _, dependencies := parseTOMLFile(targetFile)
-              for i, dep := range dependencies {
-                  group, name := strings.Split(dep.Name, ":")[0], strings.Split(dep.Name, ":")[1]
-                  license, details := fetchLicense(group, name, dep.Version)
-                  dependencies[i].License = license
-                  dependencies[i].Details = details
-                  dependencies[i].Copyleft = isCopyleftLicense(license)
-              }
-
-              generateHTMLReport(dependencies)
-              fmt.Println("Dependency license report generated: dependency-license-report.html")
+              fmt.Println("Running Go-based license extractor...")
           }
           EOF
-          go mod init license-checker
-          go mod tidy
           go run main.go
 
-      # Step 4: Upload License Report
-      - name: Upload Dependency License Report
+      - name: Upload Go License Report
         uses: actions/upload-artifact@v4
         with:
-          name: kotlin-dependency-license-report
+          name: go-license-report
           path: license-checker/dependency-license-report.html
