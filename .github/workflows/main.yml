@@ -3,7 +3,7 @@ name: Kotlin Dependency License Check
 on:
   push:
     branches:
-      - master
+      - main
 
 jobs:
   check-licenses:
@@ -15,13 +15,12 @@ jobs:
       - name: Check for TOML files
         id: check_toml
         run: |
-          if find . -type f -name "*.toml" -quit; then
+          if find . -type f -name "*.toml" -print -quit; then
             echo "toml_files_found=true" >> "$GITHUB_OUTPUT"
-          else
+          else:
             echo "toml_files_found=false" >> "$GITHUB_OUTPUT"
           fi
 
-      # Steps to set up Go and build the license checker (only if TOML files are found)
       - name: Determine latest Go version
         if: steps.check_toml.outputs.toml_files_found == 'true'
         id: get_go_version
@@ -382,11 +381,11 @@ jobs:
 
           EOF
 
-          # Initialize Go module, build, and run from within license-checker directory
-          (cd license-checker && go mod init license-checker)
-          
+          # Initialize Go module
+          go mod init license-checker
+
           # Build the license checker
-          (cd license-checker && go build -o license-checker)
+          go build -o license-checker
 
           # Navigate back to the root directory
           cd ..
