@@ -44,6 +44,7 @@ jobs:
             "io/fs"
             "io/ioutil"
             "net/http"
+            "net/url"
             "os"
             "path/filepath"
             "strings"
@@ -111,16 +112,17 @@ jobs:
             return pom, err
           }
 
-          func getLicenseInfo(dependency string, version string) (string, string) {
+          func getLicenseInfo(dependency string, version string) (string, string, string) {
             url := fmt.Sprintf("https://repo1.maven.org/maven2/%s/%s/%s/%s-%s.pom", strings.ReplaceAll(dependency, ".", "/"), dependency, version, dependency, version)
             data, err := fetchPOM(url)
             if err == nil {
               pom, err := parsePOM(data)
               if err == nil && len(pom.Licenses) > 0 {
-                return pom.Licenses[0].Name, pom.Licenses[0].URL
+                return pom.Licenses[0].Name, pom.Licenses[0].URL, ""
               }
             }
-            return "Unknown", "#"
+            searchURL := fmt.Sprintf("https://www.google.com/search?q=%s+%s+maven+repository", url.QueryEscape(dependency), url.QueryEscape(version))
+            return "Unknown", "#", searchURL
           }
 
           func generateHTMLReport(dependencies map[string]string) {
@@ -138,11 +140,11 @@ jobs:
             <body>
                 <h1>Kotlin Dependency License Report</h1>
                 <table>
-                    <tr><th>Dependency</th><th>Version</th><th>License</th><th>License URL</th></tr>`
+                    <tr><th>Dependency</th><th>Version</th><th>License</th><th>License URL</th><th>Search Link</th></tr>`
 
             for dep, version := range dependencies {
-                licenseName, licenseURL := getLicenseInfo(dep, version)
-                html += fmt.Sprintf("<tr><td>%s</td><td>%s</td><td>%s</td><td><a href='%s' target='_blank'>%s</a></td></tr>", dep, version, licenseName, licenseURL, licenseURL)
+                licenseName, licenseURL, searchLink := getLicenseInfo(dep, version)
+                html += fmt.Sprintf("<tr><td>%s</td><td>%s</td><td>%s</td><td><a href='%s' target='_blank'>%s</a></td><td><a href='%s' target='_blank'>Search</a></td></tr>", dep, version, licenseName, licenseURL, licenseURL, searchLink)
             }
 
             html += `
