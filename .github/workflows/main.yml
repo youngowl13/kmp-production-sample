@@ -88,16 +88,44 @@ jobs:
               return nil, fmt.Errorf("error loading TOML file: %v", err)
             }
 
-            versions := tree.Get("versions").(*toml.Tree)
-            libraries := tree.Get("libraries").(*toml.Tree)
+            versions, ok := tree.Get("versions").(*toml.Tree)
+            if !ok {
+              return nil, fmt.Errorf("error parsing 'versions' section in %s", filePath)
+            }
+
+            libraries, ok := tree.Get("libraries").(*toml.Tree)
+            if !ok {
+              return nil, fmt.Errorf("error parsing 'libraries' section in %s", filePath)
+            }
 
             for _, value := range libraries.ToMap() {
-              lib := value.(map[string]interface{})
-              group := lib["group"].(string)
-              name := lib["name"].(string)
-              versionRef := lib["version.ref"].(string)
+              lib, ok := value.(map[string]interface{})
+              if !ok {
+                continue
+              }
+
+              group, ok := lib["group"].(string)
+              if !ok {
+                continue
+              }
+
+              name, ok := lib["name"].(string)
+              if !ok {
+                continue
+              }
+
+              versionRef, ok := lib["version.ref"].(string)
+              if !ok {
+                continue
+              }
+
+              version, ok := versions.Get(versionRef).(string)
+              if !ok {
+                continue
+              }
+
               fullModule := fmt.Sprintf("%s:%s", group, name)
-              dependencies[fullModule] = versions.Get(versionRef).(string)
+              dependencies[fullModule] = version
             }
 
             return dependencies, nil
