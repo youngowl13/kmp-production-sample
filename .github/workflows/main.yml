@@ -26,11 +26,11 @@ jobs:
       # Step 3: Create Go Script for License Checker
       - name: Create license checker directory and Go code
         run: |
-          # Ensure directory exists before writing the report
+          # Ensure clean directory before execution
+          rm -rf license-checker
           mkdir -p license-checker
-          cd license-checker
 
-          # Create Go script
+          cd license-checker
           cat <<-'EOF' > license-checker.go
           package main
 
@@ -44,7 +44,7 @@ jobs:
             "github.com/pelletier/go-toml"
           )
 
-          // Ensure directory exists before writing the report
+          // Ensures the directory exists before writing the report
           func ensureDir(dirName string) {
             if _, err := os.Stat(dirName); os.IsNotExist(err) {
               os.MkdirAll(dirName, os.ModePerm)
@@ -117,7 +117,7 @@ jobs:
               fmt.Printf("Error writing HTML report: %v\n", err)
               os.Exit(1)
             }
-            fmt.Println("License report successfully generated!")
+            fmt.Println("License report successfully generated at:", reportPath)
           }
 
           // Main function
@@ -160,8 +160,10 @@ jobs:
           echo "Checking if license report exists..."
           find . -name "license-report.html"
           ls -l license-checker
-          if [ ! -f license-checker/license-report.html ]; then
-            echo "License report was not generated!"
+          if [ -f license-checker/license-report.html ]; then
+            echo "✅ License report found!"
+          else
+            echo "❌ License report was not generated!"
             exit 1
           fi
 
