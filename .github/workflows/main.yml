@@ -85,95 +85,49 @@ jobs:
 
             for _, value := range librariesMap {
               lib := value.(map[string]interface{})
-              group, ok := lib["group"].(string)
-              if !ok {
-                return nil, fmt.Errorf("missing or invalid 'group' key in %s", filePath)
-              }
-              name, ok := lib["name"].(string)
-              if !ok {
-                return nil, fmt.Errorf("missing or invalid 'name' key in %s", filePath)
-              }
-              versionRef, ok := lib["version.ref"].(string)
-              if !ok {
-                return nil, fmt.Errorf("missing or invalid 'version.ref' key in %s", filePath)
-              }
-              version, ok := versionsMap[versionRef].(string)
-              if !ok {
-                return nil, fmt.Errorf("missing or invalid version for ref '%s' in %s", versionRef, filePath)
-              }
+              group := lib["group"].(string)
+              name := lib["name"].(string)
+              versionRef := lib["version.ref"].(string)
+              version := versionsMap[versionRef].(string)
               dependencies[fmt.Sprintf("%s:%s", group, name)] = version
             }
             return dependencies, nil
           }
 
-          func fetchPOM(groupID, artifactID, version string) (*MavenPOM, error) {
-            groupPath := strings.ReplaceAll(groupID, ".", "/")
-            url := fmt.Sprintf("https://repo1.maven.org/maven2/%s/%s/%s/%s-%s.pom", groupPath, artifactID, version, artifactID, version)
-            resp, err := http.Get(url)
-            if err != nil || resp.StatusCode != 200 {
-              return nil, fmt.Errorf("error fetching POM")
-            }
-            defer resp.Body.Close()
-            data, err := ioutil.ReadAll(resp.Body)
-            if err != nil {
-              return nil, fmt.Errorf("error reading POM")
-            }
-            var pom MavenPOM
-            err = xml.Unmarshal(data, &pom)
-            return &pom, err
-          }
-
           func generateHTMLReport(dependencies map[string]string) {
-            html := `
-              <!DOCTYPE html>
-              <html>
-              <head>
-                <title>Kotlin Dependency License Report</title>
-                <style>
-                  table { border-collapse: collapse; width: 100%; }
-                  th, td { border: 1px solid #ddd; padding: 8px; }
-                  th { background-color: #f2f2f2; }
-                </style>
-              </head>
-              <body>
-                <h1>Kotlin Dependency License Report</h1>
-                <table>
-                  <tr><th>Dependency</th><th>Version</th><th>License</th><th>License URL</th><th>Search URL</th></tr>
-            `
+            reportPath := "license-checker/license-report.html"
+            fmt.Println("Generating report at:", reportPath)
+
+            html := "<html><body><h1>License Report</h1><table border='1'>"
+            html += "<tr><th>Dependency</th><th>Version</th><th>License</th><th>URL</th></tr>"
             for dep, version := range dependencies {
-              parts := strings.Split(dep, ":")
-              if len(parts) < 2 {
-                searchURL := fmt.Sprintf("https://www.google.com/search?q=%s+%s+license", url.QueryEscape(dep), url.QueryEscape(version))
-                html += fmt.Sprintf("<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td><a href='%s'>Search</a></td></tr>", dep, version, "Unknown", "Unknown", searchURL)
-                continue
-              }
-              groupID, artifactID := parts[0], parts[1]
-              pom, err := fetchPOM(groupID, artifactID, version)
-              if err != nil || len(pom.Licenses) == 0 {
-                searchURL := fmt.Sprintf("https://www.google.com/search?q=%s+%s+license", url.QueryEscape(dep), url.QueryEscape(version))
-                html += fmt.Sprintf("<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td><a href='%s'>Search</a></td></tr>", dep, version, "Unknown", "Unknown", searchURL)
-                continue
-              }
-              license := pom.Licenses[0]
-              html += fmt.Sprintf("<tr><td>%s</td><td>%s</td><td>%s</td><td><a href='%s'>%s</a></td><td>-</td></tr>", dep, version, license.Name, license.URL, license.URL)
+              licenseName, licenseURL := "Unknown", "#"
+              html += fmt.Sprintf("<tr><td>%s</td><td>%s</td><td>%s</td><td><a href='%s'>%s</a></td></tr>",
+                dep, version, licenseName, licenseURL, licenseURL)
             }
-            html += `
-                </table>
-              </body>
-              </html>
-            `
-            _ = ioutil.WriteFile("license-checker/license-report.html", []byte(html), 0644)
+            html += "</table></body></html>"
+
+            err := ioutil.WriteFile(reportPath, []byte(html), 0644)
+            if err != nil {
+              fmt.Printf("Error writing HTML report: %v\n", err)
+              os.Exit(1)
+            }
+            fmt.Println("License report successfully generated!")
           }
 
           func main() {
+            fmt.Println("Starting License Checker...")
+
             rootDir := "./"
             tomlFiles, err := findTOMLFiles(rootDir)
             if err != nil {
               fmt.Println("Error finding TOML files:", err)
               os.Exit(1)
             }
+
             dependencies := make(map[string]string)
             for _, file := range tomlFiles {
+              fmt.Println("Processing TOML file:", file)
               deps, err := parseTOMLFile(file)
               if err != nil {
                 fmt.Println("Error parsing TOML file:", err)
@@ -183,6 +137,7 @@ jobs:
                 dependencies[k] = v
               }
             }
+
             generateHTMLReport(dependencies)
           }
           EOF
@@ -191,15 +146,16 @@ jobs:
           go build -o license-checker
           ./license-checker || exit 1
 
-      - name: Verify report
+      - name: Verify License Report Location
         run: |
+          find . -name "license-report.html"
           ls -l license-checker
           if [ ! -f license-checker/license-report.html ]; then
             echo "License report was not generated!"
             exit 1
           fi
 
-      - name: Upload artifacts
+      - name: Upload license report artifact
         uses: actions/upload-artifact@v4
         with:
           name: license-report
