@@ -30,7 +30,21 @@ jobs:
         with:
           go-version: ${{ steps.get_go_version.outputs.go-version }}
 
-      # Step 4: Create directory and add Go code for license checker
+      # Step 4: Search for the TOML file recursively
+      - name: Search for TOML file
+        id: find_toml
+        run: |
+          echo "🔍 Searching for 'libs.versions.toml' recursively..."
+          toml_file=$(find . -name "libs.versions.toml" | head -n 1)
+          if [ -z "$toml_file" ]; then
+            echo "❌ 'libs.versions.toml' not found!"
+            exit 1
+          else
+            echo "✅ Found TOML file at: $toml_file"
+            echo "toml-path=$toml_file" >> "$GITHUB_ENV"
+          fi
+
+      # Step 5: Create directory and add Go code for license checker
       - name: Create license checker directory and Go code
         run: |
           mkdir -p license-checker
@@ -45,7 +59,7 @@ jobs:
             "net/http"
             "net/url"
             "os"
-            "strings"
+            "path/filepath"
 
             "github.com/pelletier/go-toml"
           )
@@ -82,7 +96,7 @@ jobs:
           }
 
           func fetchPOM(groupID, artifactID, version string) (*MavenPOM, error) {
-            groupPath := strings.ReplaceAll(groupID, ".", "/")
+            groupPath := groupID
             url := fmt.Sprintf("https://repo1.maven.org/maven2/%s/%s/%s/%s-%s.pom", groupPath, artifactID, version, artifactID, version)
             resp, err := http.Get(url)
             if err != nil || resp.StatusCode != 200 {
@@ -142,7 +156,7 @@ jobs:
           }
 
           func main() {
-            tomlFile := "./libs.versions.toml" // Change this to your TOML file path
+            tomlFile := os.Getenv("TOML_PATH")
             dependencies, err := parseTOMLFile(tomlFile)
             if err != nil {
               fmt.Println("Error parsing TOML file:", err)
@@ -157,7 +171,7 @@ jobs:
           go build -o license-checker-binary license-checker.go
           ./license-checker-binary
 
-      # Step 5: Verify report generation
+      # Step 6: Verify report generation
       - name: Verify License Report Location
         run: |
           echo "🔍 Checking if license report exists..."
@@ -169,7 +183,7 @@ jobs:
           fi
           ls -l ./license-checker
 
-      # Step 6: Upload license report artifact
+      # Step 7: Upload license report artifact
       - name: Upload license report artifact
         uses: actions/upload-artifact@v4
         with:
