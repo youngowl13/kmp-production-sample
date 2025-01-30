@@ -47,8 +47,89 @@ jobs:
         run: |
           mkdir -p license-checker
           cd license-checker
-          cat <<-'EOF' > license-checker.go
-          # INSERT GO CODE HERE
+          cat <<'EOF' > license-checker.go
+          package main
+
+          import (
+            "fmt"
+            "io/ioutil"
+            "os"
+            "path/filepath"
+
+            "github.com/pelletier/go-toml"
+          )
+
+          func findTOMLFile(rootDir string) string {
+            files, err := filepath.Glob(filepath.Join(rootDir, "**", "libs.versions.toml"))
+            if err != nil || len(files) == 0 {
+              fmt.Println("No TOML file found.")
+              os.Exit(1)
+            }
+            return files[0]
+          }
+
+          func parseTOMLFile(filePath string) (map[string]string, error) {
+            dependencies := make(map[string]string)
+            tree, err := toml.LoadFile(filePath)
+            if err != nil {
+              return nil, fmt.Errorf("error loading TOML file: %v", err)
+            }
+
+            versions := tree.Get("versions").(*toml.Tree).ToMap()
+            libraries := tree.Get("libraries").(*toml.Tree).ToMap()
+
+            for _, value := range libraries {
+              lib := value.(map[string]interface{})
+              group := lib["group"].(string)
+              name := lib["name"].(string)
+              versionRef := lib["version.ref"].(string)
+              version := versions[versionRef].(string)
+              dependencies[fmt.Sprintf("%s:%s", group, name)] = version
+            }
+
+            return dependencies, nil
+          }
+
+          func generateHTMLReport(dependencies map[string]string) {
+            html := `
+              <!DOCTYPE html>
+              <html>
+              <head>
+                <title>Kotlin Dependency License Report</title>
+                <style>
+                  table { border-collapse: collapse; width: 100%; }
+                  th, td { border: 1px solid #ddd; padding: 8px; }
+                  th { background-color: #f2f2f2; }
+                </style>
+              </head>
+              <body>
+                <h1>Kotlin Dependency License Report</h1>
+                <table>
+                  <tr><th>Dependency</th><th>Version</th></tr>
+            `
+            for dep, version := range dependencies {
+              html += fmt.Sprintf("<tr><td>%s</td><td>%s</td></tr>", dep, version)
+            }
+            html += "</table></body></html>"
+
+            os.MkdirAll("./license-checker", os.ModePerm)
+            _ = ioutil.WriteFile("./license-checker/license-report.html", []byte(html), 0644)
+          }
+
+          func main() {
+            tomlFile := os.Getenv("TOML_FILE")
+            if tomlFile == "" {
+              fmt.Println("TOML file path not set.")
+              os.Exit(1)
+            }
+            dependencies, err := parseTOMLFile(tomlFile)
+            if err != nil {
+              fmt.Println("Error parsing TOML file:", err)
+              os.Exit(1)
+            }
+            generateHTMLReport(dependencies)
+            fmt.Println("License report successfully generated.")
+          }
           EOF
           go mod init license-checker
           go get github.com/pelletier/go-toml
@@ -63,6 +144,7 @@ jobs:
             exit 1
           fi
           echo "✅ License report successfully generated."
+          ls -l ./license-checker
 
       # Step 7: Upload license report
       - name: Upload License Report
