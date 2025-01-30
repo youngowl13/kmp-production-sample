@@ -40,7 +40,7 @@ jobs:
         run: |
           cd license-checker
 
-          # Add Go code for the license checker
+          # Create Go code for the license checker
           cat <<-'EOF' > license-checker.go
           package main
 
@@ -54,6 +54,7 @@ jobs:
             "os"
             "path/filepath"
             "strings"
+            "sync"
 
             "github.com/pelletier/go-toml"
           )
@@ -68,7 +69,6 @@ jobs:
             Licenses []License `xml:"licenses>license"`
           }
 
-          // Find all .toml files recursively in the directory
           func findTOMLFiles(rootDir string) ([]string, error) {
             var tomlFiles []string
             err := filepath.WalkDir(rootDir, func(path string, d fs.DirEntry, err error) error {
@@ -83,10 +83,8 @@ jobs:
             return tomlFiles, err
           }
 
-          // Parse a single .toml file to extract dependencies
           func parseTOMLFile(filePath string) (map[string]string, error) {
             dependencies := make(map[string]string)
-
             tree, err := toml.LoadFile(filePath)
             if err != nil {
               return nil, fmt.Errorf("error loading TOML file: %v", err)
@@ -97,74 +95,14 @@ jobs:
 
             for _, value := range libraries.ToMap() {
               lib := value.(map[string]interface{})
-              module := lib["module"].(string)
+              group := lib["group"].(string)
+              name := lib["name"].(string)
               versionRef := lib["version.ref"].(string)
-              dependencies[module] = versions.Get(versionRef).(string)
+              fullModule := fmt.Sprintf("%s:%s", group, name)
+              dependencies[fullModule] = versions.Get(versionRef).(string)
             }
 
             return dependencies, nil
-          }
-
-          // Fetch POM file from Maven repository
-          func fetchPOM(url string) ([]byte, error) {
-            resp, err := http.Get(url)
-            if err != nil {
-              return nil, err
-            }
-            defer resp.Body.Close()
-            return ioutil.ReadAll(resp.Body)
-          }
-
-          // Parse POM XML data
-          func parsePOM(data []byte) (MavenPOM, error) {
-            var pom MavenPOM
-            err := xml.Unmarshal(data, &pom)
-            return pom, err
-          }
-
-          // Get license information for a dependency
-          func getLicenseInfo(dependency string, version string) (string, string, string) {
-            url := fmt.Sprintf("https://repo1.maven.org/maven2/%s/%s/%s/%s-%s.pom", strings.ReplaceAll(dependency, ".", "/"), dependency, version, dependency, version)
-            data, err := fetchPOM(url)
-            if err == nil {
-              pom, err := parsePOM(data)
-              if err == nil && len(pom.Licenses) > 0 {
-                return pom.Licenses[0].Name, pom.Licenses[0].URL, ""
-              }
-            }
-            searchURL := fmt.Sprintf("https://www.google.com/search?q=%s+%s+maven+repository", url.QueryEscape(dependency), url.QueryEscape(version))
-            return "Unknown", "#", searchURL
-          }
-
-          // Generate an HTML report for dependencies
-          func generateHTMLReport(dependencies map[string]string) {
-            html := `
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <title>Kotlin Dependency License Report</title>
-                <style>
-                    table { width: 100%; border-collapse: collapse; }
-                    th, td { border: 1px solid #ddd; padding: 8px; }
-                    th { background-color: #f2f2f2; }
-                </style>
-            </head>
-            <body>
-                <h1>Kotlin Dependency License Report</h1>
-                <table>
-                    <tr><th>Dependency</th><th>Version</th><th>License</th><th>License URL</th><th>Search Link</th></tr>`
-
-            for dep, version := range dependencies {
-                licenseName, licenseURL, searchLink := getLicenseInfo(dep, version)
-                html += fmt.Sprintf("<tr><td>%s</td><td>%s</td><td>%s</td><td><a href='%s' target='_blank'>%s</a></td><td><a href='%s' target='_blank'>Search</a></td></tr>", dep, version, licenseName, licenseURL, licenseURL, searchLink)
-            }
-
-            html += `
-                </table>
-            </body>
-            </html>`
-
-            ioutil.WriteFile("license-report.html", []byte(html), 0644)
           }
 
           func main() {
@@ -172,10 +110,6 @@ jobs:
             tomlFiles, err := findTOMLFiles(rootDir)
             if err != nil {
               fmt.Println("Error finding TOML files:", err)
-              return
-            }
-            if len(tomlFiles) == 0 {
-              fmt.Println("No TOML files found. Exiting.")
               return
             }
 
@@ -190,14 +124,14 @@ jobs:
                 dependencies[k] = v
               }
             }
-            generateHTMLReport(dependencies)
-            fmt.Println("License report generated: license-report.html")
+
+            fmt.Println("Extracted dependencies:", dependencies)
           }
           EOF
 
           # Initialize Go module and fetch dependencies
           go mod init license-checker
-          go mod tidy
+          go get github.com/pelletier/go-toml
           go build -o license-checker
           cd ..
 
