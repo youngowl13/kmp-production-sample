@@ -13,7 +13,7 @@ jobs:
   check-licenses:
     runs-on: ubuntu-latest
     steps:
-      # Step 1: Checkout Repository
+      # Step 1: Checkout the repository
       - name: Checkout code
         uses: actions/checkout@v4
 
@@ -26,7 +26,7 @@ jobs:
       # Step 3: Create Go Script for License Checker
       - name: Create license checker directory and Go code
         run: |
-          # Ensure clean directory before execution
+          # Ensure a clean directory before execution
           rm -rf license-checker
           mkdir -p license-checker
 
@@ -144,6 +144,10 @@ jobs:
               }
             }
 
+            if len(dependencies) == 0 {
+              fmt.Println("⚠️ No dependencies found! Report will be empty.")
+            }
+
             generateHTMLReport(dependencies)
           }
           EOF
@@ -154,9 +158,22 @@ jobs:
           go build -o license-checker-binary
           ./license-checker-binary || exit 1
 
+      # Step 4: Debugging - Verify Report Exists
+      - name: Verify License Report Location
+        run: |
+          echo "🔍 Checking if license report exists..."
+          find . -name "license-report.html" -type f
+          ls -lR
+          if [ -f license-checker/license-report.html ]; then
+            echo "✅ License report found!"
+          else
+            echo "❌ License report was not generated!"
+            exit 1
+          fi
+
       # Step 5: Upload License Report
       - name: Upload license report artifact
         uses: actions/upload-artifact@v4
         with:
           name: license-report
-          path: license-checker/license-report.html
+          path: "**/license-report.html"
