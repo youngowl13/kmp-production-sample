@@ -26,8 +26,11 @@ jobs:
       # Step 3: Create Go Script for License Checker
       - name: Create license checker directory and Go code
         run: |
+          # Ensure directory exists before writing the report
           mkdir -p license-checker
           cd license-checker
+
+          # Create Go script
           cat <<-'EOF' > license-checker.go
           package main
 
@@ -40,6 +43,13 @@ jobs:
 
             "github.com/pelletier/go-toml"
           )
+
+          // Ensure directory exists before writing the report
+          func ensureDir(dirName string) {
+            if _, err := os.Stat(dirName); os.IsNotExist(err) {
+              os.MkdirAll(dirName, os.ModePerm)
+            }
+          }
 
           // Recursively search for `.toml` files
           func findTOMLFiles(rootDir string) ([]string, error) {
@@ -89,9 +99,12 @@ jobs:
 
           // Generates an HTML report with dependencies
           func generateHTMLReport(dependencies map[string]string) {
+            reportDir := "license-checker"
             reportPath := "license-checker/license-report.html"
-            fmt.Println("Generating report at:", reportPath)
+            fmt.Println("Ensuring directory:", reportDir)
+            ensureDir(reportDir) // Ensure directory exists before writing
 
+            fmt.Println("Generating report at:", reportPath)
             html := "<html><body><h1>License Report</h1><table border='1'>"
             html += "<tr><th>Dependency</th><th>Version</th></tr>"
             for dep, version := range dependencies {
@@ -138,8 +151,8 @@ jobs:
           # Initialize Go module and install dependencies
           go mod init license-checker
           go get github.com/pelletier/go-toml
-          go build -o license-checker
-          ./license-checker || exit 1
+          go build -o license-checker-binary
+          ./license-checker-binary || exit 1
 
       # Step 4: Debugging - Verify Report Exists
       - name: Verify License Report Location
