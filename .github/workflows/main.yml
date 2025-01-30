@@ -7,22 +7,20 @@ on:
   pull_request:
     branches:
       - master
+  workflow_dispatch:
 
 jobs:
   check-licenses:
     runs-on: ubuntu-latest
     steps:
-      # Step 1: Checkout code
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Step 2: Set up Go environment
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
           go-version: "1.20"
 
-      # Step 3: Create license checker directory and Go code
       - name: Create license checker directory and Go code
         run: |
           mkdir -p license-checker
@@ -193,8 +191,7 @@ jobs:
           go build -o license-checker
           ./license-checker || exit 1
 
-      # Step 4: Debugging step to ensure report exists
-      - name: Verify report generation
+      - name: Verify report
         run: |
           ls -l license-checker
           if [ ! -f license-checker/license-report.html ]; then
@@ -202,16 +199,8 @@ jobs:
             exit 1
           fi
 
-      # Step 5: Upload license report artifact
-      - name: Upload license report
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: license-report
           path: license-checker/license-report.html
-
-      # Step 6: Upload binary artifact
-      - name: Upload binary artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: kotlin-license-checker
-          path: license-checker/license-checker
