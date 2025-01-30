@@ -17,17 +17,17 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Step 2: Find libs.versions.toml file dynamically
+      # Step 2: Find the libs.versions.toml file recursively
       - name: Find libs.versions.toml file
         id: find_toml
         run: |
           TOML_FILE=$(find . -name "libs.versions.toml" | head -n 1)
           if [ -z "$TOML_FILE" ]; then
-            echo "❌ No libs.versions.toml file found!"
+            echo "❌ libs.versions.toml file not found!"
             exit 1
           fi
+          echo "TOML_FILE=$TOML_FILE" >> "$GITHUB_ENV"
           echo "✅ Found TOML file at: $TOML_FILE"
-          echo "TOML_PATH=$TOML_FILE" >> "$GITHUB_ENV"
 
       # Step 3: Determine the latest Go version dynamically
       - name: Determine latest Go version
@@ -42,8 +42,8 @@ jobs:
         with:
           go-version: ${{ steps.get_go_version.outputs.go-version }}
 
-      # Step 5: Create license checker directory and Go script
-      - name: Create license checker and Go script
+      # Step 5: Create license checker directory and add Go code
+      - name: Create license checker directory and Go script
         run: |
           mkdir -p license-checker
           cd license-checker
@@ -57,6 +57,7 @@ jobs:
             "net/http"
             "net/url"
             "os"
+            "path/filepath"
             "strings"
 
             "github.com/pelletier/go-toml"
@@ -69,6 +70,15 @@ jobs:
 
           type MavenPOM struct {
             Licenses []License `xml:"licenses>license"`
+          }
+
+          func findTOMLFile(rootDir string) string {
+            files, err := filepath.Glob(filepath.Join(rootDir, "**", "libs.versions.toml"))
+            if err != nil || len(files) == 0 {
+              fmt.Println("No TOML file found.")
+              os.Exit(1)
+            }
+            return files[0]
           }
 
           func parseTOMLFile(filePath string) (map[string]string, error) {
@@ -93,34 +103,12 @@ jobs:
             return dependencies, nil
           }
 
-          func fetchPOM(groupID, artifactID, version string) (*MavenPOM, error) {
-            groupPath := strings.ReplaceAll(groupID, ".", "/")
-            url := fmt.Sprintf("https://repo1.maven.org/maven2/%s/%s/%s/%s-%s.pom", groupPath, artifactID, version, artifactID, version)
-            resp, err := http.Get(url)
-            if err != nil || resp.StatusCode != 200 {
-              return nil, fmt.Errorf("error fetching POM")
-            }
-            defer resp.Body.Close()
-            data, err := ioutil.ReadAll(resp.Body)
-            if err != nil {
-              return nil, fmt.Errorf("error reading POM")
-            }
-            var pom MavenPOM
-            err = xml.Unmarshal(data, &pom)
-            return &pom, err
-          }
-
           func generateHTMLReport(dependencies map[string]string) {
             html := `
               <!DOCTYPE html>
               <html>
               <head>
                 <title>Kotlin Dependency License Report</title>
-                <style>
-                  table { border-collapse: collapse; width: 100%; }
-                  th, td { border: 1px solid #ddd; padding: 8px; }
-                  th { background-color: #f2f2f2; }
-                </style>
               </head>
               <body>
                 <h1>Kotlin Dependency License Report</h1>
@@ -128,37 +116,25 @@ jobs:
                   <tr><th>Dependency</th><th>Version</th><th>License</th><th>License URL</th><th>Search URL</th></tr>
             `
             for dep, version := range dependencies {
-              parts := strings.Split(dep, ":")
-              if len(parts) < 2 {
-                searchURL := fmt.Sprintf("https://www.google.com/search?q=%s+%s+license", url.QueryEscape(dep), url.QueryEscape(version))
-                html += fmt.Sprintf("<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td><a href='%s'>Search</a></td></tr>", dep, version, "Unknown", "Unknown", searchURL)
-                continue
-              }
-              groupID, artifactID := parts[0], parts[1]
-              pom, err := fetchPOM(groupID, artifactID, version)
-              if err != nil || len(pom.Licenses) == 0 {
-                searchURL := fmt.Sprintf("https://www.google.com/search?q=%s+%s+license", url.QueryEscape(dep), url.QueryEscape(version))
-                html += fmt.Sprintf("<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td><a href='%s'>Search</a></td></tr>", dep, version, "Unknown", "Unknown", searchURL)
-                continue
-              }
-              license := pom.Licenses[0]
-              html += fmt.Sprintf("<tr><td>%s</td><td>%s</td><td>%s</td><td><a href='%s'>%s</a></td><td>-</td></tr>", dep, version, license.Name, license.URL, license.URL)
+              searchURL := fmt.Sprintf("https://www.google.com/search?q=%s+%s+license", url.QueryEscape(dep), url.QueryEscape(version))
+              html += fmt.Sprintf("<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td><a href='%s'>Search</a></td></tr>", dep, version, "Unknown", "Unknown", searchURL)
             }
-            html += `
-                </table>
-              </body>
-              </html>
-            `
+            html += "</table></body></html>"
+
             os.MkdirAll("./license-checker", os.ModePerm)
             _ = ioutil.WriteFile("./license-checker/license-report.html", []byte(html), 0644)
           }
 
           func main() {
-            tomlFile := os.Getenv("TOML_PATH")
+            tomlFile := os.Getenv("TOML_FILE")
+            if tomlFile == "" {
+              fmt.Println("TOML file path not set.")
+              os.Exit(1)
+            }
             dependencies, err := parseTOMLFile(tomlFile)
             if err != nil {
               fmt.Println("Error parsing TOML file:", err)
-              return
+              os.Exit(1)
             }
             generateHTMLReport(dependencies)
             fmt.Println("License report successfully generated.")
@@ -166,23 +142,20 @@ jobs:
           EOF
           go mod init license-checker
           go get github.com/pelletier/go-toml
-          go build -o license-checker-binary license-checker.go
-          ./license-checker-binary
+          go build -o license-checker license-checker.go
+          ./license-checker
 
       # Step 6: Verify License Report
       - name: Verify License Report
         run: |
-          echo "🔍 Checking if license report exists..."
-          if [ -f ./license-checker/license-report.html ]; then
-            echo "✅ License report found at ./license-checker/license-report.html"
-          else
+          if [ ! -f ./license-checker/license-report.html ]; then
             echo "❌ License report was not generated!"
             exit 1
           fi
-          ls -R ./license-checker
+          echo "✅ License report successfully generated."
 
-      # Step 7: Upload License Report
-      - name: Upload license report artifact
+      # Step 7: Upload license report
+      - name: Upload License Report
         uses: actions/upload-artifact@v4
         with:
           name: license-report
