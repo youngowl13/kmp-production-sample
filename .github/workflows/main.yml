@@ -47,6 +47,7 @@ jobs:
             "os"
             "path/filepath"
             "strings"
+
             "github.com/pelletier/go-toml"
           )
 
@@ -72,6 +73,27 @@ jobs:
               return nil
             })
             return tomlFiles, err
+          }
+
+          func parseTOMLFile(filePath string) (map[string]string, error) {
+            dependencies := make(map[string]string)
+
+            tree, err := toml.LoadFile(filePath)
+            if err != nil {
+              return nil, fmt.Errorf("error loading TOML file: %v", err)
+            }
+
+            versions := tree.Get("versions").(*toml.Tree)
+            libraries := tree.Get("libraries").(*toml.Tree)
+
+            for key, value := range libraries.ToMap() {
+              lib := value.(map[string]interface{})
+              module := lib["module"].(string)
+              versionRef := lib["version.ref"].(string)
+              dependencies[module] = versions.Get(versionRef).(string)
+            }
+
+            return dependencies, nil
           }
 
           func fetchPOM(url string) ([]byte, error) {
