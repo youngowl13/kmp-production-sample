@@ -80,14 +80,38 @@ jobs:
             if err != nil {
               return nil, fmt.Errorf("error loading TOML file: %v", err)
             }
-            versions := tree.Get("versions").(*toml.Tree)
-            libraries := tree.Get("libraries").(*toml.Tree)
-            for _, v := range libraries.ToMap() {
-              lib := v.(map[string]interface{})
-              group := lib["group"].(string)
-              name := lib["name"].(string)
-              versionRef := lib["version.ref"].(string)
-              dependencies[fmt.Sprintf("%s:%s", group, name)] = versions.Get(versionRef).(string)
+
+            versions := tree.Get("versions")
+            if versions == nil {
+              return nil, fmt.Errorf("missing [versions] section in %s", filePath)
+            }
+            libraries := tree.Get("libraries")
+            if libraries == nil {
+              return nil, fmt.Errorf("missing [libraries] section in %s", filePath)
+            }
+
+            versionsMap := versions.(*toml.Tree).ToMap()
+            librariesMap := libraries.(*toml.Tree).ToMap()
+
+            for _, value := range librariesMap {
+              lib := value.(map[string]interface{})
+              group, ok := lib["group"].(string)
+              if !ok {
+                return nil, fmt.Errorf("missing or invalid 'group' key in %s", filePath)
+              }
+              name, ok := lib["name"].(string)
+              if !ok {
+                return nil, fmt.Errorf("missing or invalid 'name' key in %s", filePath)
+              }
+              versionRef, ok := lib["version.ref"].(string)
+              if !ok {
+                return nil, fmt.Errorf("missing or invalid 'version.ref' key in %s", filePath)
+              }
+              version, ok := versionsMap[versionRef].(string)
+              if !ok {
+                return nil, fmt.Errorf("missing or invalid version for ref '%s' in %s", versionRef, filePath)
+              }
+              dependencies[fmt.Sprintf("%s:%s", group, name)] = version
             }
             return dependencies, nil
           }
@@ -178,14 +202,25 @@ jobs:
           cd ..
           ./license-checker/license-checker || exit 1
 
-      # Step 5: Upload license report artifact
+      # Step 5: Debugging step for report path
+      - name: Check if report exists and list directory contents
+        run: |
+          ls -l license-checker
+          if [ -f license-checker/license-report.html ]; then
+            echo "HTML report exists."
+          else
+            echo "HTML report does not exist."
+            exit 1
+          fi
+
+      # Step 6: Upload license report artifact
       - name: Upload license report artifact
         uses: actions/upload-artifact@v4
         with:
           name: license-report
           path: license-checker/license-report.html
 
-      # Step 6: Upload binary artifact
+      # Step 7: Upload binary artifact
       - name: Upload binary artifact
         uses: actions/upload-artifact@v4
         with:
