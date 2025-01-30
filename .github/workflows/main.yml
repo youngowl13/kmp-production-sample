@@ -42,7 +42,6 @@ jobs:
             "fmt"
             "os"
             "path/filepath"
-
             "github.com/pelletier/go-toml"
           )
 
@@ -52,7 +51,7 @@ jobs:
               if err != nil {
                 return err
               }
-              if filepath.Ext(path) == ".toml" {
+              if !info.IsDir() && filepath.Ext(path) == ".toml" {
                 tomlFile = path
                 return filepath.SkipDir
               }
@@ -76,10 +75,10 @@ jobs:
 
             for _, value := range libraries {
               lib := value.(map[string]interface{})
-              group := lib["group"].(string)
-              name := lib["name"].(string)
-              versionRef := lib["version.ref"].(string)
-              version := versions[versionRef].(string)
+              group, _ := lib["group"].(string)
+              name, _ := lib["name"].(string)
+              versionRef, _ := lib["version.ref"].(string)
+              version, _ := versions[versionRef].(string)
               dependencies[fmt.Sprintf("%s:%s", group, name)] = version
             }
 
@@ -119,12 +118,12 @@ jobs:
             tomlFile, err := findTOMLFile(".")
             if err != nil {
               fmt.Println("Error finding TOML file:", err)
-              return
+              os.Exit(1)
             }
             dependencies, err := parseTOMLFile(tomlFile)
             if err != nil {
               fmt.Println("Error parsing TOML file:", err)
-              return
+              os.Exit(1)
             }
             generateHTMLReport(dependencies)
             fmt.Println("License report successfully generated.")
