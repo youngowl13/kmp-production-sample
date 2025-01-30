@@ -17,35 +17,33 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Step 2: Determine the latest Go version dynamically
+      # Step 2: Find the TOML file dynamically
+      - name: Find libs.versions.toml file
+        id: find_toml
+        run: |
+          TOML_FILE=$(find . -name "libs.versions.toml" | head -n 1)
+          if [ -z "$TOML_FILE" ]; then
+            echo "❌ No libs.versions.toml file found!"
+            exit 1
+          fi
+          echo "✅ Found TOML file at: $TOML_FILE"
+          echo "TOML_PATH=$TOML_FILE" >> "$GITHUB_ENV"
+
+      # Step 3: Determine latest Go version
       - name: Determine latest Go version
         id: get_go_version
         run: |
           latest_go_version=$(curl -s https://go.dev/VERSION?m=text | sed 's/^go//' | head -n 1)
           echo "go-version=$latest_go_version" >> "$GITHUB_OUTPUT"
 
-      # Step 3: Set up the Go environment
+      # Step 4: Set up the Go environment
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
           go-version: ${{ steps.get_go_version.outputs.go-version }}
 
-      # Step 4: Search for the TOML file recursively
-      - name: Search for TOML file
-        id: find_toml
-        run: |
-          echo "🔍 Searching for 'libs.versions.toml' recursively..."
-          toml_file=$(find . -name "libs.versions.toml" | head -n 1)
-          if [ -z "$toml_file" ]; then
-            echo "❌ 'libs.versions.toml' not found!"
-            exit 1
-          else
-            echo "✅ Found TOML file at: $toml_file"
-            echo "toml-path=$toml_file" >> "$GITHUB_ENV"
-          fi
-
-      # Step 5: Create directory and add Go code for license checker
-      - name: Create license checker directory and Go code
+      # Step 5: Create license checker directory and Go code
+      - name: Create license checker and Go script
         run: |
           mkdir -p license-checker
           cd license-checker
@@ -59,7 +57,7 @@ jobs:
             "net/http"
             "net/url"
             "os"
-            "path/filepath"
+            "strings"
 
             "github.com/pelletier/go-toml"
           )
@@ -96,7 +94,7 @@ jobs:
           }
 
           func fetchPOM(groupID, artifactID, version string) (*MavenPOM, error) {
-            groupPath := groupID
+            groupPath := strings.ReplaceAll(groupID, ".", "/")
             url := fmt.Sprintf("https://repo1.maven.org/maven2/%s/%s/%s/%s-%s.pom", groupPath, artifactID, version, artifactID, version)
             resp, err := http.Get(url)
             if err != nil || resp.StatusCode != 200 {
@@ -171,20 +169,7 @@ jobs:
           go build -o license-checker-binary license-checker.go
           ./license-checker-binary
 
-      # Step 6: Verify report generation
-      - name: Verify License Report Location
-        run: |
-          echo "🔍 Checking if license report exists..."
-          if [ -f ./license-checker/license-report.html ]; then
-            echo "✅ License report found at ./license-checker/license-report.html"
-          else
-            echo "❌ License report was not generated!"
-            exit 1
-          fi
-          ls -l ./license-checker
-
-      # Step 7: Upload license report artifact
-      - name: Upload license report artifact
+      - name: Upload license report
         uses: actions/upload-artifact@v4
         with:
           name: license-report
