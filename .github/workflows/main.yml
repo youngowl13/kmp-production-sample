@@ -50,6 +50,7 @@ jobs:
             "io/fs"
             "io/ioutil"
             "net/http"
+            "net/url"
             "os"
             "path/filepath"
             "strings"
@@ -131,7 +132,7 @@ jobs:
                 return pom.Licenses[0].Name, pom.Licenses[0].URL, ""
               }
             }
-            searchURL := fmt.Sprintf("https://www.google.com/search?q=%s+%s+maven+repository", url.PathEscape(dependency), url.PathEscape(version))
+            searchURL := fmt.Sprintf("https://www.google.com/search?q=%s+%s+maven+repository", url.QueryEscape(dependency), url.QueryEscape(version))
             return "Unknown", "#", searchURL
           }
 
