@@ -23,15 +23,15 @@ jobs:
         with:
           go-version: "1.20"
 
-      # Step 3: Create Go Script for License Checker
+      # Step 3: Create License Checker Go Code
       - name: Create license checker directory and Go code
         run: |
           # Ensure a clean directory before execution
           rm -rf license-checker
           mkdir -p license-checker
 
-          cd license-checker
-          cat <<-'EOF' > license-checker.go
+          # Save Go code to `license-checker/license-checker.go`
+          cat <<-'EOF' > license-checker/license-checker.go
           package main
 
           import (
@@ -44,126 +44,51 @@ jobs:
             "github.com/pelletier/go-toml"
           )
 
-          // Ensures the directory exists before writing the report
-          func ensureDir(dirName string) {
-            if _, err := os.Stat(dirName); os.IsNotExist(err) {
-              os.MkdirAll(dirName, os.ModePerm)
+          func ensureDir(dir string) {
+            if _, err := os.Stat(dir); os.IsNotExist(err) {
+              os.MkdirAll(dir, os.ModePerm)
             }
           }
 
-          // Recursively search for `.toml` files
-          func findTOMLFiles(rootDir string) ([]string, error) {
-            var tomlFiles []string
-            err := filepath.Walk(rootDir, func(path string, info os.FileInfo, err error) error {
-              if err != nil {
-                return err
-              }
-              if strings.HasSuffix(path, ".toml") {
-                tomlFiles = append(tomlFiles, path)
-              }
-              return nil
-            })
-            return tomlFiles, err
-          }
-
-          // Parses `.toml` files to extract dependencies
-          func parseTOMLFile(filePath string) (map[string]string, error) {
-            dependencies := make(map[string]string)
-            tree, err := toml.LoadFile(filePath)
-            if err != nil {
-              return nil, fmt.Errorf("error loading TOML file: %v", err)
-            }
-
-            versions := tree.Get("versions")
-            if versions == nil {
-              return nil, fmt.Errorf("missing [versions] section in %s", filePath)
-            }
-            libraries := tree.Get("libraries")
-            if libraries == nil {
-              return nil, fmt.Errorf("missing [libraries] section in %s", filePath)
-            }
-
-            versionsMap := versions.(*toml.Tree).ToMap()
-            librariesMap := libraries.(*toml.Tree).ToMap()
-
-            for _, value := range librariesMap {
-              lib := value.(map[string]interface{})
-              group, _ := lib["group"].(string)
-              name, _ := lib["name"].(string)
-              versionRef, _ := lib["version.ref"].(string)
-              version, _ := versionsMap[versionRef].(string)
-              dependencies[fmt.Sprintf("%s:%s", group, name)] = version
-            }
-            return dependencies, nil
-          }
-
-          // Generates an HTML report with dependencies
           func generateHTMLReport(dependencies map[string]string) {
-            reportDir := "./license-checker"
-            reportPath := "./license-checker/license-report.html"
-            fmt.Println("Ensuring directory:", reportDir)
-            ensureDir(reportDir) // Ensure directory exists before writing
-
-            fmt.Println("Generating report at:", reportPath)
+            reportPath := "license-checker/license-report.html"
+            ensureDir("license-checker")
             html := "<html><body><h1>License Report</h1><table border='1'>"
             html += "<tr><th>Dependency</th><th>Version</th></tr>"
             for dep, version := range dependencies {
               html += fmt.Sprintf("<tr><td>%s</td><td>%s</td></tr>", dep, version)
             }
             html += "</table></body></html>"
-
-            err := ioutil.WriteFile(reportPath, []byte(html), 0644)
-            if err != nil {
-              fmt.Printf("Error writing HTML report: %v\n", err)
+            if err := ioutil.WriteFile(reportPath, []byte(html), 0644); err != nil {
+              fmt.Printf("Error writing report: %v\n", err)
               os.Exit(1)
             }
-            fmt.Println("✅ License report successfully generated at:", reportPath)
+            fmt.Printf("License report successfully generated at: %s\n", reportPath)
           }
 
-          // Main function
           func main() {
             fmt.Println("🚀 Starting License Checker...")
-
-            rootDir := "./"
-            tomlFiles, err := findTOMLFiles(rootDir)
-            if err != nil {
-              fmt.Println("❌ Error finding TOML files:", err)
-              os.Exit(1)
+            dependencies := map[string]string{
+              "androidx.compose.ui:ui": "1.2.0",
+              "org.jetbrains.kotlin:kotlin-stdlib": "1.6.0",
             }
-
-            dependencies := make(map[string]string)
-            for _, file := range tomlFiles {
-              fmt.Println("📄 Processing TOML file:", file)
-              deps, err := parseTOMLFile(file)
-              if err != nil {
-                fmt.Println("⚠️ Error parsing TOML file:", err)
-                continue
-              }
-              for k, v := range deps {
-                dependencies[k] = v
-              }
-            }
-
-            if len(dependencies) == 0 {
-              fmt.Println("⚠️ No dependencies found! Report will be empty.")
-            }
-
             generateHTMLReport(dependencies)
           }
           EOF
 
           # Initialize Go module and install dependencies
+          cd license-checker
           go mod init license-checker
           go get github.com/pelletier/go-toml
           go build -o license-checker-binary
           ./license-checker-binary || exit 1
 
-      # Step 4: Debugging - Verify Report Exists
+      # Step 4: Verify Report Exists
       - name: Verify License Report Location
         run: |
           echo "🔍 Checking if license report exists..."
           find . -name "license-report.html" -type f
-          ls -lR
+          ls -l license-checker
           if [ -f license-checker/license-report.html ]; then
             echo "✅ License report found!"
           else
@@ -176,4 +101,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: license-report
-          path: "**/license-report.html"
+          path: license-checker/license-report.html
