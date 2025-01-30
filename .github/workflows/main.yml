@@ -39,18 +39,12 @@ jobs:
           package main
 
           import (
-            "encoding/xml"
             "fmt"
             "os"
             "path/filepath"
 
             "github.com/pelletier/go-toml"
           )
-
-          type License struct {
-            Name string `xml:"name"`
-            URL  string `xml:"url"`
-          }
 
           func findTOMLFile(root string) (string, error) {
             var tomlFile string
