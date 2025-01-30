@@ -40,7 +40,7 @@ jobs:
         run: |
           cd license-checker
 
-          # Create Go code for the license checker
+          # Add Go code for the license checker
           cat <<-'EOF' > license-checker.go
           package main
 
@@ -50,6 +50,7 @@ jobs:
             "io/fs"
             "io/ioutil"
             "net/http"
+            "net/url"
             "os"
             "path/filepath"
             "strings"
@@ -94,7 +95,7 @@ jobs:
             versions := tree.Get("versions").(*toml.Tree)
             libraries := tree.Get("libraries").(*toml.Tree)
 
-            for key, value := range libraries.ToMap() {
+            for _, value := range libraries.ToMap() {
               lib := value.(map[string]interface{})
               module := lib["module"].(string)
               versionRef := lib["version.ref"].(string)
@@ -131,7 +132,7 @@ jobs:
                 return pom.Licenses[0].Name, pom.Licenses[0].URL, ""
               }
             }
-            searchURL := fmt.Sprintf("https://www.google.com/search?q=%s+%s+maven+repository", dependency, version)
+            searchURL := fmt.Sprintf("https://www.google.com/search?q=%s", url.QueryEscape(dependency+" "+version+" maven repository"))
             return "Unknown", "#", searchURL
           }
 
@@ -196,7 +197,7 @@ jobs:
 
           # Initialize Go module and fetch dependencies
           go mod init license-checker
-          go get github.com/pelletier/go-toml
+          go mod tidy
           go build -o license-checker
           cd ..
 
