@@ -99,8 +99,8 @@ jobs:
 
           // Generates an HTML report with dependencies
           func generateHTMLReport(dependencies map[string]string) {
-            reportDir := "license-checker"
-            reportPath := "license-checker/license-report.html"
+            reportDir := "./license-checker"
+            reportPath := "./license-checker/license-report.html"
             fmt.Println("Ensuring directory:", reportDir)
             ensureDir(reportDir) // Ensure directory exists before writing
 
@@ -117,26 +117,26 @@ jobs:
               fmt.Printf("Error writing HTML report: %v\n", err)
               os.Exit(1)
             }
-            fmt.Println("License report successfully generated at:", reportPath)
+            fmt.Println("✅ License report successfully generated at:", reportPath)
           }
 
           // Main function
           func main() {
-            fmt.Println("Starting License Checker...")
+            fmt.Println("🚀 Starting License Checker...")
 
             rootDir := "./"
             tomlFiles, err := findTOMLFiles(rootDir)
             if err != nil {
-              fmt.Println("Error finding TOML files:", err)
+              fmt.Println("❌ Error finding TOML files:", err)
               os.Exit(1)
             }
 
             dependencies := make(map[string]string)
             for _, file := range tomlFiles {
-              fmt.Println("Processing TOML file:", file)
+              fmt.Println("📄 Processing TOML file:", file)
               deps, err := parseTOMLFile(file)
               if err != nil {
-                fmt.Println("Error parsing TOML file:", err)
+                fmt.Println("⚠️ Error parsing TOML file:", err)
                 continue
               }
               for k, v := range deps {
@@ -157,9 +157,9 @@ jobs:
       # Step 4: Debugging - Verify Report Exists
       - name: Verify License Report Location
         run: |
-          echo "Checking if license report exists..."
+          echo "🔍 Checking if license report exists..."
           find . -name "license-report.html"
-          ls -l license-checker
+          ls -lR
           if [ -f license-checker/license-report.html ]; then
             echo "✅ License report found!"
           else
