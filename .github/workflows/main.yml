@@ -7,30 +7,22 @@ on:
   pull_request:
     branches:
       - master
-  workflow_dispatch:
 
 jobs:
   check-licenses:
     runs-on: ubuntu-latest
     steps:
-      # Step 1: Checkout the repository
+      # Step 1: Checkout code
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Step 2: Determine the latest Go version dynamically
-      - name: Determine latest Go version
-        id: get_go_version
-        run: |
-          latest_go_version=$(curl -s https://go.dev/VERSION?m=text | sed 's/^go//' | head -n 1)
-          echo "go-version=$latest_go_version" >> "$GITHUB_OUTPUT"
-
-      # Step 3: Set up the Go environment
+      # Step 2: Set up Go environment
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: ${{ steps.get_go_version.outputs.go-version }}
+          go-version: "1.20"
 
-      # Step 4: Create directory and add Go code for license checker
+      # Step 3: Create license checker directory and Go code
       - name: Create license checker directory and Go code
         run: |
           mkdir -p license-checker
@@ -172,7 +164,6 @@ jobs:
               </body>
               </html>
             `
-            os.MkdirAll("license-checker", os.ModePerm)
             _ = ioutil.WriteFile("license-checker/license-report.html", []byte(html), 0644)
           }
 
@@ -200,28 +191,25 @@ jobs:
           go mod init license-checker
           go get github.com/pelletier/go-toml
           go build -o license-checker
-          cd ..
-          ./license-checker/license-checker || exit 1
+          ./license-checker || exit 1
 
-      # Step 5: Debugging step for report path
-      - name: Check if report exists and list directory contents
+      # Step 4: Debugging step to ensure report exists
+      - name: Verify report generation
         run: |
           ls -l license-checker
-          if [ -f license-checker/license-report.html ]; then
-            echo "HTML report exists."
-          else
-            echo "HTML report does not exist."
+          if [ ! -f license-checker/license-report.html ]; then
+            echo "License report was not generated!"
             exit 1
           fi
 
-      # Step 6: Upload license report artifact
-      - name: Upload license report artifact
+      # Step 5: Upload license report artifact
+      - name: Upload license report
         uses: actions/upload-artifact@v4
         with:
           name: license-report
           path: license-checker/license-report.html
 
-      # Step 7: Upload binary artifact
+      # Step 6: Upload binary artifact
       - name: Upload binary artifact
         uses: actions/upload-artifact@v4
         with:
