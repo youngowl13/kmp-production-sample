@@ -154,19 +154,6 @@ jobs:
           go build -o license-checker-binary
           ./license-checker-binary || exit 1
 
-      # Step 4: Debugging - Verify Report Exists
-      - name: Verify License Report Location
-        run: |
-          echo "🔍 Checking if license report exists..."
-          find . -name "license-report.html"
-          ls -lR
-          if [ -f license-checker/license-report.html ]; then
-            echo "✅ License report found!"
-          else
-            echo "❌ License report was not generated!"
-            exit 1
-          fi
-
       # Step 5: Upload License Report
       - name: Upload license report artifact
         uses: actions/upload-artifact@v4
