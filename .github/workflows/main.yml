@@ -172,6 +172,7 @@ jobs:
               </body>
               </html>
             `
+            os.MkdirAll("license-checker", os.ModePerm)
             _ = ioutil.WriteFile("license-checker/license-report.html", []byte(html), 0644)
           }
 
