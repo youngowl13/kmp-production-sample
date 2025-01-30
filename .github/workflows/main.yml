@@ -1,6 +1,5 @@
 name: Kotlin Dependency License Check
 
-# Trigger the workflow on push to master, pull requests to master, or manual dispatch
 on:
   push:
     branches:
@@ -14,34 +13,34 @@ jobs:
   check-licenses:
     runs-on: ubuntu-latest
     steps:
-      # Step 1: Checkout the code repository
+      # Step 1: Checkout the repository
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Step 2: Determine the latest version of Go dynamically
+      # Step 2: Determine the latest Go version dynamically
       - name: Determine latest Go version
         id: get_go_version
         run: |
           latest_go_version=$(curl -s https://go.dev/VERSION?m=text | sed 's/^go//' | head -n 1)
           echo "go-version=$latest_go_version" >> "$GITHUB_OUTPUT"
 
-      # Step 3: Set up Go environment for running the custom Go tool
+      # Step 3: Set up Go environment
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
           go-version: ${{ steps.get_go_version.outputs.go-version }}
 
-      # Step 4: Create a directory to store the license checker tool
+      # Step 4: Create a directory for the license checker
       - name: Create license checker directory
         run: mkdir -p license-checker
 
-      # Step 5: Write the Go code for license checking, build the binary, and execute it
+      # Step 5: Build and run the license checker
       - name: Build and run license checker
         shell: bash
         run: |
           cd license-checker
 
-          # Writing the license-checker.go file
+          # Create Go code for the license checker
           cat <<-'EOF' > license-checker.go
           package main
 
@@ -68,7 +67,7 @@ jobs:
             Licenses []License `xml:"licenses>license"`
           }
 
-          // Recursive search for TOML files in the repository
+          // Find all .toml files recursively in the directory
           func findTOMLFiles(rootDir string) ([]string, error) {
             var tomlFiles []string
             err := filepath.WalkDir(rootDir, func(path string, d fs.DirEntry, err error) error {
@@ -83,7 +82,7 @@ jobs:
             return tomlFiles, err
           }
 
-          // Parse a TOML file to extract dependencies and their versions
+          // Parse a single .toml file to extract dependencies
           func parseTOMLFile(filePath string) (map[string]string, error) {
             dependencies := make(map[string]string)
 
@@ -105,7 +104,7 @@ jobs:
             return dependencies, nil
           }
 
-          // Fetch the POM file from a Maven repository
+          // Fetch POM file from Maven repository
           func fetchPOM(url string) ([]byte, error) {
             resp, err := http.Get(url)
             if err != nil {
@@ -115,14 +114,14 @@ jobs:
             return ioutil.ReadAll(resp.Body)
           }
 
-          // Parse the POM XML to extract license information
+          // Parse POM XML data
           func parsePOM(data []byte) (MavenPOM, error) {
             var pom MavenPOM
             err := xml.Unmarshal(data, &pom)
             return pom, err
           }
 
-          // Construct license information including fallback to search link
+          // Get license information for a dependency
           func getLicenseInfo(dependency string, version string) (string, string, string) {
             url := fmt.Sprintf("https://repo1.maven.org/maven2/%s/%s/%s/%s-%s.pom", strings.ReplaceAll(dependency, ".", "/"), dependency, version, dependency, version)
             data, err := fetchPOM(url)
@@ -136,7 +135,7 @@ jobs:
             return "Unknown", "#", searchURL
           }
 
-          // Generate the HTML report
+          // Generate an HTML report for dependencies
           func generateHTMLReport(dependencies map[string]string) {
             html := `
             <!DOCTYPE html>
@@ -195,28 +194,26 @@ jobs:
           }
           EOF
 
-          # Initialize the Go module and install dependencies
+          # Initialize Go module and fetch dependencies
           go mod init license-checker
           go get github.com/pelletier/go-toml
-
-          # Build the license-checker binary
           go build -o license-checker
           cd ..
 
-          # Run the binary to generate the license report
+          # Execute the license checker
           if ! ./license-checker/license-checker; then
             echo "Error: license-checker encountered an issue."
             exit 1
           fi
 
-      # Step 6: Upload the HTML license report as an artifact
+      # Step 6: Upload the license report as an artifact
       - name: Upload license report artifact
         uses: actions/upload-artifact@v4
         with:
           name: license-report
           path: license-checker/license-report.html
 
-      # Step 7: Upload the binary as an artifact for reuse
+      # Step 7: Upload the binary artifact of the license checker
       - name: Upload binary artifact
         uses: actions/upload-artifact@v4
         with:
