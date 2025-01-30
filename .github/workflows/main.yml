@@ -48,6 +48,8 @@ jobs:
             "encoding/xml"
             "fmt"
             "io/fs"
+            "io/ioutil"
+            "net/http"
             "os"
             "path/filepath"
             "strings"
@@ -101,6 +103,59 @@ jobs:
             return dependencies, nil
           }
 
+          func fetchPOM(url string) ([]byte, error) {
+            resp, err := http.Get(url)
+            if err != nil {
+              return nil, err
+            }
+            defer resp.Body.Close()
+            return ioutil.ReadAll(resp.Body)
+          }
+
+          func parsePOM(data []byte) (*MavenPOM, error) {
+            var pom MavenPOM
+            err := xml.Unmarshal(data, &pom)
+            return &pom, err
+          }
+
+          func generateHTMLReport(dependencies map[string]string) {
+            html := `
+            <!DOCTYPE html>
+            <html>
+            <head>
+              <title>Kotlin Dependency License Report</title>
+              <style>
+                table { width: 100%; border-collapse: collapse; }
+                th, td { border: 1px solid #ddd; padding: 8px; }
+                th { background-color: #f2f2f2; }
+              </style>
+            </head>
+            <body>
+              <h1>Kotlin Dependency License Report</h1>
+              <table>
+                <tr><th>Dependency</th><th>Version</th><th>License</th><th>License URL</th><th>Search Link</th></tr>`
+
+            for dep, version := range dependencies {
+              licenseName := "Unknown"
+              licenseURL := "#"
+              searchLink := fmt.Sprintf("https://www.google.com/search?q=%s+%s+maven+repository", dep, version)
+
+              html += fmt.Sprintf("<tr><td>%s</td><td>%s</td><td>%s</td><td><a href='%s' target='_blank'>%s</a></td><td><a href='%s' target='_blank'>Search</a></td></tr>", dep, version, licenseName, licenseURL, licenseURL, searchLink)
+            }
+
+            html += `
+              </table>
+            </body>
+            </html>`
+
+            err := ioutil.WriteFile("license-report.html", []byte(html), 0644)
+            if err != nil {
+              fmt.Println("Error writing HTML report:", err)
+            } else {
+              fmt.Println("License report generated: license-report.html")
+            }
+          }
+
           func main() {
             rootDir := os.Getenv("GITHUB_WORKSPACE")
             tomlFiles, err := findTOMLFiles(rootDir)
@@ -121,7 +176,7 @@ jobs:
               }
             }
 
-            fmt.Println("Extracted dependencies:", dependencies)
+            generateHTMLReport(dependencies)
           }
           EOF
 
