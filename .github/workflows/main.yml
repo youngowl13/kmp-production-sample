@@ -91,10 +91,16 @@ jobs:
 
             for _, value := range libraries.ToMap() {
               lib := value.(map[string]interface{})
-              group := lib["group"].(string)
-              name := lib["name"].(string)
-              versionRef := lib["version.ref"].(string)
-              version := versions.Get(versionRef).(string)
+              group, groupOk := lib["group"].(string)
+              name, nameOk := lib["name"].(string)
+              versionRef, versionRefOk := lib["version.ref"].(string)
+              if !groupOk || !nameOk || !versionRefOk {
+                continue
+              }
+              version, versionOk := versions.Get(versionRef).(string)
+              if !versionOk {
+                continue
+              }
               dependencies[fmt.Sprintf("%s:%s", group, name)] = version
             }
 
