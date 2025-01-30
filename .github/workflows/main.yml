@@ -1,5 +1,6 @@
 name: Kotlin Dependency License Check
 
+# Trigger the workflow on push to master, pull requests to master, or manual dispatch
 on:
   push:
     branches:
@@ -12,44 +13,44 @@ on:
 jobs:
   check-licenses:
     runs-on: ubuntu-latest
-
     steps:
-      # Step 1: Checkout the repository
+      # Step 1: Checkout the code repository
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Step 2: Determine the latest Go version
+      # Step 2: Determine the latest version of Go dynamically
       - name: Determine latest Go version
         id: get_go_version
         run: |
           latest_go_version=$(curl -s https://go.dev/VERSION?m=text | sed 's/^go//' | head -n 1)
           echo "go-version=$latest_go_version" >> "$GITHUB_OUTPUT"
 
-      # Step 3: Set up Go environment
+      # Step 3: Set up Go environment for running the custom Go tool
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
           go-version: ${{ steps.get_go_version.outputs.go-version }}
 
-      # Step 4: Create a directory for the license checker
+      # Step 4: Create a directory to store the license checker tool
       - name: Create license checker directory
         run: mkdir -p license-checker
 
-      # Step 5: Build and run the license checker
+      # Step 5: Write the Go code for license checking, build the binary, and execute it
       - name: Build and run license checker
+        shell: bash
         run: |
           cd license-checker
 
-          # Generate the Go code file dynamically
+          # Writing the license-checker.go file
           cat <<-'EOF' > license-checker.go
           package main
 
           import (
             "encoding/xml"
             "fmt"
+            "io/fs"
             "io/ioutil"
             "net/http"
-            "net/url"
             "os"
             "path/filepath"
             "strings"
@@ -67,13 +68,14 @@ jobs:
             Licenses []License `xml:"licenses>license"`
           }
 
+          // Recursive search for TOML files in the repository
           func findTOMLFiles(rootDir string) ([]string, error) {
             var tomlFiles []string
-            err := filepath.Walk(rootDir, func(path string, info os.FileInfo, err error) error {
+            err := filepath.WalkDir(rootDir, func(path string, d fs.DirEntry, err error) error {
               if err != nil {
                 return err
               }
-              if !info.IsDir() && strings.HasSuffix(info.Name(), ".toml") {
+              if !d.IsDir() && strings.HasSuffix(d.Name(), ".toml") {
                 tomlFiles = append(tomlFiles, path)
               }
               return nil
@@ -81,6 +83,7 @@ jobs:
             return tomlFiles, err
           }
 
+          // Parse a TOML file to extract dependencies and their versions
           func parseTOMLFile(filePath string) (map[string]string, error) {
             dependencies := make(map[string]string)
 
@@ -102,8 +105,9 @@ jobs:
             return dependencies, nil
           }
 
-          func fetchPOM(pomURL string) ([]byte, error) {
-            resp, err := http.Get(pomURL)
+          // Fetch the POM file from a Maven repository
+          func fetchPOM(url string) ([]byte, error) {
+            resp, err := http.Get(url)
             if err != nil {
               return nil, err
             }
@@ -111,23 +115,28 @@ jobs:
             return ioutil.ReadAll(resp.Body)
           }
 
-          func getLicenseInfo(group, artifact, version string) (string, string, string) {
-            baseURL := "https://repo1.maven.org/maven2"
-            groupPath := strings.ReplaceAll(group, ".", "/")
-            pomURL := fmt.Sprintf("%s/%s/%s/%s/%s-%s.pom", baseURL, groupPath, artifact, version, artifact, version)
-            
-            data, err := fetchPOM(pomURL)
+          // Parse the POM XML to extract license information
+          func parsePOM(data []byte) (MavenPOM, error) {
+            var pom MavenPOM
+            err := xml.Unmarshal(data, &pom)
+            return pom, err
+          }
+
+          // Construct license information including fallback to search link
+          func getLicenseInfo(dependency string, version string) (string, string, string) {
+            url := fmt.Sprintf("https://repo1.maven.org/maven2/%s/%s/%s/%s-%s.pom", strings.ReplaceAll(dependency, ".", "/"), dependency, version, dependency, version)
+            data, err := fetchPOM(url)
             if err == nil {
-              var pom MavenPOM
-              if err := xml.Unmarshal(data, &pom); err == nil && len(pom.Licenses) > 0 {
+              pom, err := parsePOM(data)
+              if err == nil && len(pom.Licenses) > 0 {
                 return pom.Licenses[0].Name, pom.Licenses[0].URL, ""
               }
             }
-
-            searchURL := fmt.Sprintf("https://www.google.com/search?q=%s+%s+%s+maven+repository", url.QueryEscape(group), url.QueryEscape(artifact), url.QueryEscape(version))
+            searchURL := fmt.Sprintf("https://www.google.com/search?q=%s+%s+maven+repository", dependency, version)
             return "Unknown", "#", searchURL
           }
 
+          // Generate the HTML report
           func generateHTMLReport(dependencies map[string]string) {
             html := `
             <!DOCTYPE html>
@@ -136,33 +145,25 @@ jobs:
                 <title>Kotlin Dependency License Report</title>
                 <style>
                     table { width: 100%; border-collapse: collapse; }
-                    th, td { border: 1px solid black; padding: 8px; text-align: left; }
+                    th, td { border: 1px solid #ddd; padding: 8px; }
+                    th { background-color: #f2f2f2; }
                 </style>
             </head>
             <body>
                 <h1>Kotlin Dependency License Report</h1>
                 <table>
-                    <tr>
-                        <th>Dependency</th>
-                        <th>Version</th>
-                        <th>License</th>
-                        <th>License URL</th>
-                        <th>Google Search</th>
-                    </tr>`
+                    <tr><th>Dependency</th><th>Version</th><th>License</th><th>License URL</th><th>Search Link</th></tr>`
 
             for dep, version := range dependencies {
-              group, artifact := dep, dep
-              licenseName, licenseURL, searchLink := getLicenseInfo(group, artifact, version)
-              html += fmt.Sprintf(`<tr>
-                                    <td>%s</td>
-                                    <td>%s</td>
-                                    <td>%s</td>
-                                    <td><a href='%s' target='_blank'>Link</a></td>
-                                    <td><a href='%s' target='_blank'>Search</a></td>
-                                  </tr>`, dep, version, licenseName, licenseURL, searchLink)
+                licenseName, licenseURL, searchLink := getLicenseInfo(dep, version)
+                html += fmt.Sprintf("<tr><td>%s</td><td>%s</td><td>%s</td><td><a href='%s' target='_blank'>%s</a></td><td><a href='%s' target='_blank'>Search</a></td></tr>", dep, version, licenseName, licenseURL, licenseURL, searchLink)
             }
 
-            html += `</table></body></html>`
+            html += `
+                </table>
+            </body>
+            </html>`
+
             ioutil.WriteFile("license-report.html", []byte(html), 0644)
           }
 
@@ -194,19 +195,30 @@ jobs:
           }
           EOF
 
+          # Initialize the Go module and install dependencies
           go mod init license-checker
           go get github.com/pelletier/go-toml
+
+          # Build the license-checker binary
           go build -o license-checker
           cd ..
 
+          # Run the binary to generate the license report
           if ! ./license-checker/license-checker; then
             echo "Error: license-checker encountered an issue."
             exit 1
           fi
 
-      # Step 6: Upload license report
+      # Step 6: Upload the HTML license report as an artifact
       - name: Upload license report artifact
         uses: actions/upload-artifact@v4
         with:
           name: license-report
           path: license-checker/license-report.html
+
+      # Step 7: Upload the binary as an artifact for reuse
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kotlin-license-checker
+          path: license-checker/license-checker
