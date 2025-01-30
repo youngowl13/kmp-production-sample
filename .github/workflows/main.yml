@@ -48,13 +48,9 @@ jobs:
             "encoding/xml"
             "fmt"
             "io/fs"
-            "io/ioutil"
-            "net/http"
-            "net/url"
             "os"
             "path/filepath"
             "strings"
-            "sync"
 
             "github.com/pelletier/go-toml"
           )
