@@ -45,6 +45,7 @@ jobs:
             "net/http"
             "net/url"
             "os"
+            "strings"
 
             "github.com/pelletier/go-toml"
           )
@@ -81,7 +82,7 @@ jobs:
           }
 
           func fetchPOM(groupID, artifactID, version string) (*MavenPOM, error) {
-            groupPath := groupID
+            groupPath := strings.ReplaceAll(groupID, ".", "/")
             url := fmt.Sprintf("https://repo1.maven.org/maven2/%s/%s/%s/%s-%s.pom", groupPath, artifactID, version, artifactID, version)
             resp, err := http.Get(url)
             if err != nil || resp.StatusCode != 200 {
