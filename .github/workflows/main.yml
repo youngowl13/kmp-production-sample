@@ -13,14 +13,17 @@ jobs:
   check-licenses:
     runs-on: ubuntu-latest
     steps:
+      # Step 1: Checkout Repository
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # Step 2: Set Up Go Environment
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
           go-version: "1.20"
 
+      # Step 3: Create Go Script for License Checker
       - name: Create license checker directory and Go code
         run: |
           mkdir -p license-checker
@@ -38,6 +41,7 @@ jobs:
             "github.com/pelletier/go-toml"
           )
 
+          // Recursively search for `.toml` files
           func findTOMLFiles(rootDir string) ([]string, error) {
             var tomlFiles []string
             err := filepath.Walk(rootDir, func(path string, info os.FileInfo, err error) error {
@@ -52,6 +56,7 @@ jobs:
             return tomlFiles, err
           }
 
+          // Parses `.toml` files to extract dependencies
           func parseTOMLFile(filePath string) (map[string]string, error) {
             dependencies := make(map[string]string)
             tree, err := toml.LoadFile(filePath)
@@ -73,15 +78,16 @@ jobs:
 
             for _, value := range librariesMap {
               lib := value.(map[string]interface{})
-              group := lib["group"].(string)
-              name := lib["name"].(string)
-              versionRef := lib["version.ref"].(string)
-              version := versionsMap[versionRef].(string)
+              group, _ := lib["group"].(string)
+              name, _ := lib["name"].(string)
+              versionRef, _ := lib["version.ref"].(string)
+              version, _ := versionsMap[versionRef].(string)
               dependencies[fmt.Sprintf("%s:%s", group, name)] = version
             }
             return dependencies, nil
           }
 
+          // Generates an HTML report with dependencies
           func generateHTMLReport(dependencies map[string]string) {
             reportPath := "license-checker/license-report.html"
             fmt.Println("Generating report at:", reportPath)
@@ -101,6 +107,7 @@ jobs:
             fmt.Println("License report successfully generated!")
           }
 
+          // Main function
           func main() {
             fmt.Println("Starting License Checker...")
 
@@ -127,13 +134,17 @@ jobs:
             generateHTMLReport(dependencies)
           }
           EOF
+
+          # Initialize Go module and install dependencies
           go mod init license-checker
           go get github.com/pelletier/go-toml
           go build -o license-checker
           ./license-checker || exit 1
 
+      # Step 4: Debugging - Verify Report Exists
       - name: Verify License Report Location
         run: |
+          echo "Checking if license report exists..."
           find . -name "license-report.html"
           ls -l license-checker
           if [ ! -f license-checker/license-report.html ]; then
@@ -141,6 +152,7 @@ jobs:
             exit 1
           fi
 
+      # Step 5: Upload License Report
       - name: Upload license report artifact
         uses: actions/upload-artifact@v4
         with:
