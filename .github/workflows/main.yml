@@ -29,26 +29,14 @@ jobs:
           package main
 
           import (
-            "encoding/xml"
             "fmt"
             "io/ioutil"
-            "net/http"
-            "net/url"
             "os"
             "path/filepath"
             "strings"
 
             "github.com/pelletier/go-toml"
           )
-
-          type License struct {
-            Name string `xml:"name"`
-            URL  string `xml:"url"`
-          }
-
-          type MavenPOM struct {
-            Licenses []License `xml:"licenses>license"`
-          }
 
           func findTOMLFiles(rootDir string) ([]string, error) {
             var tomlFiles []string
@@ -99,11 +87,9 @@ jobs:
             fmt.Println("Generating report at:", reportPath)
 
             html := "<html><body><h1>License Report</h1><table border='1'>"
-            html += "<tr><th>Dependency</th><th>Version</th><th>License</th><th>URL</th></tr>"
+            html += "<tr><th>Dependency</th><th>Version</th></tr>"
             for dep, version := range dependencies {
-              licenseName, licenseURL := "Unknown", "#"
-              html += fmt.Sprintf("<tr><td>%s</td><td>%s</td><td>%s</td><td><a href='%s'>%s</a></td></tr>",
-                dep, version, licenseName, licenseURL, licenseURL)
+              html += fmt.Sprintf("<tr><td>%s</td><td>%s</td></tr>", dep, version)
             }
             html += "</table></body></html>"
 
