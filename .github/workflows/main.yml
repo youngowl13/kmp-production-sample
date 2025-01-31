@@ -207,7 +207,7 @@ jobs:
             </tbody>
              </table>
            </body>
-</html>` + "`" + `
+             </html>` + "`" + `
 
               tmpl, err := template.New("report").Funcs(template.FuncMap{
                   "extractDependencyInfo": extractDependencyInfo,
