@@ -34,172 +34,160 @@ jobs:
           package main
 
           import (
-            "encoding/xml"
-            "fmt"
-            "html/template"
-            "io/fs"
-            "io/ioutil"
-            "net/http"
-            "os"
-            "path/filepath"
-            "strings"
+              "encoding/xml"
+              "fmt"
+              "html/template"
+              "io/fs"
+              "io/ioutil"
+              "net/http"
+              "os"
+              "path/filepath"
+              "strings"
 
-            "github.com/pelletier/go-toml"
+              "github.com/pelletier/go-toml"
           )
 
-          // License represents a software license.
           type License struct {
-            Name string `xml:"name"`
-            URL  string `xml:"url"`
+              Name string `xml:"name"`
+              URL  string `xml:"url"`
           }
 
-          // MavenPOM represents a simplified Maven POM.
           type MavenPOM struct {
-            XMLName  xml.Name  `xml:"project"`
-            Licenses []License `xml:"licenses>license"`
+              XMLName  xml.Name  `xml:"project"`
+              Licenses []License `xml:"licenses>license"`
           }
 
-          // findTOMLFile searches for a .toml file within the given root directory and its subdirectories.
           func findTOMLFile(root string) (string, error) {
-            var tomlFile string
-            err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-              if err != nil {
-                return err
-              }
-              if d.IsDir() && d.Name() == ".git" {
-                return filepath.SkipDir
-              }
-              if !d.IsDir() && strings.HasSuffix(d.Name(), ".toml") {
-                tomlFile = path
-                return filepath.SkipAll
-              }
-              return nil
-            })
+              var tomlFile string
+              err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+                  if err != nil {
+                      return err
+                  }
+                  if d.IsDir() && d.Name() == ".git" {
+                      return filepath.SkipDir
+                  }
+                  if !d.IsDir() && strings.HasSuffix(d.Name(), ".toml") {
+                      tomlFile = path
+                      return filepath.SkipAll
+                  }
+                  return nil
+              })
 
-            if tomlFile == "" {
-              return "", fmt.Errorf("no .toml file found in any directory of the repository")
-            }
-            return tomlFile, err
+              if tomlFile == "" {
+                  return "", fmt.Errorf("no .toml file found in any directory of the repository")
+              }
+              return tomlFile, err
           }
 
-          // parseTOMLFile parses the .toml file and extracts dependency information.
           func parseTOMLFile(filePath string) (map[string]string, error) {
-            dependencies := make(map[string]string)
-            tree, err := toml.LoadFile(filePath)
-            if err != nil {
-              return nil, fmt.Errorf("error loading TOML file: %v", err)
-            }
-
-            versionsTree := tree.Get("versions")
-            librariesTree := tree.Get("libraries")
-
-            var versions map[string]interface{}
-            var libraries map[string]interface{}
-
-            if versionsTree != nil {
-              versions = versionsTree.(*toml.Tree).ToMap()
-            }
-            if librariesTree != nil {
-              libraries = librariesTree.(*toml.Tree).ToMap()
-            }
-
-            for _, value := range libraries {
-              lib := value.(map[string]interface{})
-              group, _ := lib["group"].(string)
-              name, _ := lib["name"].(string)
-              versionRef, _ := lib["version.ref"].(string)
-              version, _ := versions[versionRef].(string)
-              dependencies[filepath.Join(group, name)] = version
-            }
-
-            return dependencies, nil
-          }
-
-          // fetchPOM fetches the Maven POM file for a given dependency from the Maven Central repository.
-          func fetchPOM(groupID, artifactID, version string) (*MavenPOM, error) {
-            groupPath := strings.ReplaceAll(groupID, ".", "/")
-            pomURL := fmt.Sprintf("https://repo1.maven.org/maven2/%s/%s/%s/%s-%s.pom", groupPath, artifactID, version, artifactID, version)
-
-            resp, err := http.Get(pomURL)
-            if err != nil {
-              return nil, err
-            }
-            defer resp.Body.Close()
-
-            data, err := ioutil.ReadAll(resp.Body)
-            if err != nil {
-              return nil, err
-            }
-
-            var pom MavenPOM
-            err = xml.Unmarshal(data, &pom)
-            return &pom, err
-          }
-
-          // getLicenseInfo retrieves the license information for a given dependency.
-          func getLicenseInfo(groupID, artifactID, version string) (string, string) {
-            pom, err := fetchPOM(groupID, artifactID, version)
-            if err != nil || len(pom.Licenses) == 0 {
-              return "Unknown", fmt.Sprintf("https://www.google.com/search?q=%s+%s+%s+license", groupID, artifactID, version)
-            }
-            return pom.Licenses[0].Name, pom.Licenses[0].URL
-          }
-
-          // extractDependencyInfo extracts dependency information from the name.
-          func extractDependencyInfo(depName string) (string, string) {
-            // Common dependency name formats and their corresponding group IDs
-            knownFormats := map[string]string{
-              "agp":                          "com.android.tools.build:gradle",
-              "androidx-core-ktx":            "androidx.core:core-ktx",
-              "appcompat":                    "androidx.appcompat:appcompat",
-              "material":                     "com.google.android.material:material",
-              "constraintlayout":             "androidx.constraintlayout:constraintlayout",
-              "kotlin":                       "org.jetbrains.kotlin:kotlin-stdlib",
-              "kotlin-test":                  "org.jetbrains.kotlin:kotlin-test",
-              "kotlin-test-junit":            "org.jetbrains.kotlin:kotlin-test-junit",
-              "kotlinx-coroutines-core":      "org.jetbrains.kotlinx:kotlinx-coroutines-core",
-              "kotlinx-coroutines-android":   "org.jetbrains.kotlinx:kotlinx-coroutines-android",
-              "kotlinx-coroutines-test":      "org.jetbrains.kotlinx:kotlinx-coroutines-test",
-              "junit":                        "junit:junit",
-              "androidx-test-ext-junit":      "androidx.test.ext:junit",
-              "espresso-core":                "androidx.test.espresso:espresso-core",
-              "lifecycle-runtime-ktx":        "androidx.lifecycle:lifecycle-runtime-ktx",
-              "activity-compose":             "androidx.activity:activity-compose",
-              "compose-bom":                  "androidx.compose:compose-bom",
-              "compose-ui":                   "androidx.compose.ui:ui",
-              "compose-ui-graphics":          "androidx.compose.ui:ui-graphics",
-              "compose-ui-tooling-preview":  "androidx.compose.ui:ui-tooling-preview",
-              "compose-material3":            "androidx.compose.material3:material3",
-              "compose-ui-test-junit4":       "androidx.compose.ui:ui-test-junit4",
-              "compose-ui-tooling":           "androidx.compose.ui:ui-tooling",
-              "compose-ui-test-manifest":     "androidx.compose.ui:ui-test-manifest",
-              "lifecycle-viewmodel-compose": "androidx.lifecycle:lifecycle-viewmodel-compose",
-              "core-ktx":                   "androidx.core:core-ktx",
-              "androidx-test-runner":         "androidx.test:runner",
-              "lifecycle-livedata-ktx":      "androidx.lifecycle:lifecycle-livedata-ktx",
-            }
-
-            // Check if the dependency name matches a known format
-            if groupID, ok := knownFormats[depName]; ok {
-              parts := strings.Split(groupID, ":")
-              if len(parts) == 2 {
-                return parts[0], parts[1]
+              dependencies := make(map[string]string)
+              tree, err := toml.LoadFile(filePath)
+              if err != nil {
+                  return nil, fmt.Errorf("error loading TOML file: %v", err)
               }
-            }
 
-            // Default case: return the dependency name as artifact ID with an unknown group ID
-            return "Unknown", depName
+              versionsTree := tree.Get("versions")
+              librariesTree := tree.Get("libraries")
+
+              var versions map[string]interface{}
+              if versionsTree != nil {
+                  versions = versionsTree.(*toml.Tree).ToMap()
+              }
+
+              var libraries map[string]interface{}
+              if librariesTree != nil {
+                  libraries = librariesTree.(*toml.Tree).ToMap()
+              }
+
+              for _, value := range libraries {
+                  lib := value.(map[string]interface{})
+                  group, _ := lib["group"].(string)
+                  name, _ := lib["name"].(string)
+                  versionRef, _ := lib["version.ref"].(string)
+                  version, _ := versions[versionRef].(string)
+                  dependencies[filepath.Join(group, name)] = version
+              }
+
+              return dependencies, nil
           }
 
-          // generateHTMLReport generates an HTML report of the dependencies.
+          func fetchPOM(groupID, artifactID, version string) (*MavenPOM, error) {
+              groupPath := strings.ReplaceAll(groupID, ".", "/")
+              pomURL := fmt.Sprintf("https://repo1.maven.org/maven2/%s/%s/%s/%s-%s.pom", 
+                  groupPath, artifactID, version, artifactID, version)
+
+              resp, err := http.Get(pomURL)
+              if err != nil {
+                  return nil, err
+              }
+              defer resp.Body.Close()
+
+              data, err := ioutil.ReadAll(resp.Body)
+              if err != nil {
+                  return nil, err
+              }
+
+              var pom MavenPOM
+              err = xml.Unmarshal(data, &pom)
+              return &pom, err
+          }
+
+          func getLicenseInfo(groupID, artifactID, version string) (string, string) {
+              pom, err := fetchPOM(groupID, artifactID, version)
+              if err != nil || len(pom.Licenses) == 0 {
+                  return "Unknown", fmt.Sprintf("https://www.google.com/search?q=%s+%s+%s+license", 
+                      groupID, artifactID, version)
+              }
+              return pom.Licenses[0].Name, pom.Licenses[0].URL
+          }
+
+          func extractDependencyInfo(depName string) (string, string) {
+              knownFormats := map[string]string{
+                  "agp":                          "com.android.tools.build:gradle",
+                  "androidx-core-ktx":            "androidx.core:core-ktx",
+                  "appcompat":                    "androidx.appcompat:appcompat",
+                  "material":                     "com.google.android.material:material",
+                  "constraintlayout":             "androidx.constraintlayout:constraintlayout",
+                  "kotlin":                       "org.jetbrains.kotlin:kotlin-stdlib",
+                  "kotlin-test":                  "org.jetbrains.kotlin:kotlin-test",
+                  "kotlin-test-junit":            "org.jetbrains.kotlin:kotlin-test-junit",
+                  "kotlinx-coroutines-core":      "org.jetbrains.kotlinx:kotlinx-coroutines-core",
+                  "kotlinx-coroutines-android":   "org.jetbrains.kotlinx:kotlinx-coroutines-android",
+                  "kotlinx-coroutines-test":      "org.jetbrains.kotlinx:kotlinx-coroutines-test",
+                  "junit":                        "junit:junit",
+                  "androidx-test-ext-junit":      "androidx.test.ext:junit",
+                  "espresso-core":                "androidx.test.espresso:espresso-core",
+                  "lifecycle-runtime-ktx":        "androidx.lifecycle:lifecycle-runtime-ktx",
+                  "activity-compose":             "androidx.activity:activity-compose",
+                  "compose-bom":                  "androidx.compose:compose-bom",
+                  "compose-ui":                   "androidx.compose.ui:ui",
+                  "compose-ui-graphics":          "androidx.compose.ui:ui-graphics",
+                  "compose-ui-tooling-preview":   "androidx.compose.ui:ui-tooling-preview",
+                  "compose-material3":            "androidx.compose.material3:material3",
+                  "compose-ui-test-junit4":       "androidx.compose.ui:ui-test-junit4",
+                  "compose-ui-tooling":           "androidx.compose.ui:ui-tooling",
+                  "compose-ui-test-manifest":     "androidx.compose.ui:ui-test-manifest",
+                  "lifecycle-viewmodel-compose":  "androidx.lifecycle:lifecycle-viewmodel-compose",
+                  "core-ktx":                     "androidx.core:core-ktx",
+                  "androidx-test-runner":         "androidx.test:runner",
+                  "lifecycle-livedata-ktx":       "androidx.lifecycle:lifecycle-livedata-ktx",
+              }
+
+              if groupID, ok := knownFormats[depName]; ok {
+                  parts := strings.Split(groupID, ":")
+                  if len(parts) == 2 {
+                      return parts[0], parts[1]
+                  }
+              }
+              return "Unknown", depName
+          }
+
           func generateHTMLReport(dependencies map[string]string) error {
-              // Create the output directory if it doesn't exist
               outputDir := "./license-checker"
               if _, err := os.Stat(outputDir); os.IsNotExist(err) {
                   os.Mkdir(outputDir, 0755)
               }
 
-              // Define the template for the HTML report
               htmlTemplate := ` + "`" + `<!DOCTYPE html>
 <html>
 <head>
@@ -242,7 +230,6 @@ jobs:
 </body>
 </html>` + "`" + `
 
-              // Create a new template and parse the HTML template
               tmpl, err := template.New("report").Funcs(template.FuncMap{
                   "extractDependencyInfo": extractDependencyInfo,
                   "getLicenseInfo":        getLicenseInfo,
@@ -251,7 +238,6 @@ jobs:
                   return fmt.Errorf("error creating template: %v", err)
               }
 
-              // Create the report file
               reportPath := filepath.Join(outputDir, "dependency-license-report.html")
               file, err := os.Create(reportPath)
               if err != nil {
@@ -259,7 +245,6 @@ jobs:
               }
               defer file.Close()
 
-              // Execute the template with the dependencies and write to the file
               err = tmpl.Execute(file, dependencies)
               if err != nil {
                   return fmt.Errorf("error generating report: %v", err)
@@ -270,25 +255,23 @@ jobs:
           }
 
           func main() {
-            // Find and parse the TOML file
-            tomlFilePath, err := findTOMLFile(".")
-            if err != nil {
-              fmt.Printf("Error: %v\n", err)
-              os.Exit(1)
-            }
+              tomlFilePath, err := findTOMLFile(".")
+              if err != nil {
+                  fmt.Printf("Error finding TOML file: %v\n", err)
+                  os.Exit(1)
+              }
 
-            dependencies, err := parseTOMLFile(tomlFilePath)
-            if err != nil {
-              fmt.Printf("Error: %v\n", err)
-              os.Exit(1)
-            }
+              dependencies, err := parseTOMLFile(tomlFilePath)
+              if err != nil {
+                  fmt.Printf("Error parsing TOML file: %v\n", err)
+                  os.Exit(1)
+              }
 
-            // Generate HTML report
-            err = generateHTMLReport(dependencies)
-            if err != nil {
-              fmt.Printf("Error: %v\n", err)
-              os.Exit(1)
-            }
+              err = generateHTMLReport(dependencies)
+              if err != nil {
+                  fmt.Printf("Error generating report: %v\n", err)
+                  os.Exit(1)
+              }
           }
           EOF
 
@@ -297,17 +280,24 @@ jobs:
           cd license-checker
           go mod init license-checker
           go mod tidy
-          go build license-checker.go
+          go build -v -o license-checker-bin
           cd ..
-          ./license-checker/license-checker
+          ./license-checker/license-checker-bin
 
       - name: Verify License Report Location
         run: |
           echo "🔍 Checking if license report exists..."
           ls -l ./license-checker || echo "❌ License report not found!"
+          if [ -f ./license-checker/dependency-license-report.html ]; then
+            echo "✅ Report exists at ./license-checker/dependency-license-report.html"
+          else
+            echo "❌ Report file missing!"
+            exit 1
+          fi
 
       - name: Upload license report artifact
         uses: actions/upload-artifact@v4
         with:
           name: license-report
           path: ./license-checker/dependency-license-report.html
+          retention-days: 7
