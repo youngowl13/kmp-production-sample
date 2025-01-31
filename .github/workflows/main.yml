@@ -206,7 +206,7 @@ jobs:
             }
 
             // Define the template for the HTML report
-            htmlTemplate := `
+            htmlTemplate := ` + "`" + `
 <!DOCTYPE html>
 <html>
 <head>
@@ -251,7 +251,7 @@ jobs:
 </table>
 </body>
 </html>
-`
+` + "`" + `
 
             // Create a new template and parse the HTML template
             tmpl, err := template.New("report").Funcs(template.FuncMap{
