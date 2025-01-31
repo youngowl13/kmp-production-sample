@@ -149,28 +149,7 @@ jobs:
                   "material":                     "com.google.android.material:material",
                   "constraintlayout":             "androidx.constraintlayout:constraintlayout",
                   "kotlin":                       "org.jetbrains.kotlin:kotlin-stdlib",
-                  "kotlin-test":                  "org.jetbrains.kotlin:kotlin-test",
-                  "kotlin-test-junit":            "org.jetbrains.kotlin:kotlin-test-junit",
-                  "kotlinx-coroutines-core":      "org.jetbrains.kotlinx:kotlinx-coroutines-core",
-                  "kotlinx-coroutines-android":   "org.jetbrains.kotlinx:kotlinx-coroutines-android",
-                  "kotlinx-coroutines-test":      "org.jetbrains.kotlinx:kotlinx-coroutines-test",
                   "junit":                        "junit:junit",
-                  "androidx-test-ext-junit":      "androidx.test.ext:junit",
-                  "espresso-core":                "androidx.test.espresso:espresso-core",
-                  "lifecycle-runtime-ktx":        "androidx.lifecycle:lifecycle-runtime-ktx",
-                  "activity-compose":             "androidx.activity:activity-compose",
-                  "compose-bom":                  "androidx.compose:compose-bom",
-                  "compose-ui":                   "androidx.compose.ui:ui",
-                  "compose-ui-graphics":          "androidx.compose.ui:ui-graphics",
-                  "compose-ui-tooling-preview":   "androidx.compose.ui:ui-tooling-preview",
-                  "compose-material3":            "androidx.compose.material3:material3",
-                  "compose-ui-test-junit4":       "androidx.compose.ui:ui-test-junit4",
-                  "compose-ui-tooling":           "androidx.compose.ui:ui-tooling",
-                  "compose-ui-test-manifest":     "androidx.compose.ui:ui-test-manifest",
-                  "lifecycle-viewmodel-compose":  "androidx.lifecycle:lifecycle-viewmodel-compose",
-                  "core-ktx":                     "androidx.core:core-ktx",
-                  "androidx-test-runner":         "androidx.test:runner",
-                  "lifecycle-livedata-ktx":       "androidx.lifecycle:lifecycle-livedata-ktx",
               }
 
               if groupID, ok := knownFormats[depName]; ok {
@@ -189,7 +168,7 @@ jobs:
               }
 
               htmlTemplate := ` + "`" + `<!DOCTYPE html>
-<html>
+  <html>
 <head>
     <title>Dependency License Report</title>
     <style>
