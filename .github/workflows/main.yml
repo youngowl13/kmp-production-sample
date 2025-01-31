@@ -137,13 +137,7 @@ jobs:
           }
 
           // getLicenseInfo retrieves the license information for a given dependency.
-          func getLicenseInfo(dependency, version string) (string, string) {
-            parts := strings.Split(dependency, ":")
-            if len(parts) != 2 {
-              return "Unknown", fmt.Sprintf("https://www.google.com/search?q=%s+%s+license", dependency, version)
-            }
-
-            groupID, artifactID := parts[0], parts[1]
+          func getLicenseInfo(groupID, artifactID, version string) (string, string) {
             pom, err := fetchPOM(groupID, artifactID, version)
             if err != nil || len(pom.Licenses) == 0 {
               return "Unknown", fmt.Sprintf("https://www.google.com/search?q=%s+%s+%s+license", groupID, artifactID, version)
@@ -199,85 +193,80 @@ jobs:
 
           // generateHTMLReport generates an HTML report of the dependencies.
           func generateHTMLReport(dependencies map[string]string) error {
-            // Create the output directory if it doesn't exist
-            outputDir := "./license-checker"
-            if _, err := os.Stat(outputDir); os.IsNotExist(err) {
-              os.Mkdir(outputDir, 0755)
-            }
+              // Create the output directory if it doesn't exist
+              outputDir := "./license-checker"
+              if _, err := os.Stat(outputDir); os.IsNotExist(err) {
+                  os.Mkdir(outputDir, 0755)
+              }
 
-            // Define the template for the HTML report
-            htmlTemplate := ` + "`" + `
-<!DOCTYPE html>
+              // Define the template for the HTML report
+              htmlTemplate := ` + "`" + `<!DOCTYPE html>
 <html>
 <head>
-<title>Dependency License Report</title>
-<style>
-	body { font-family: Arial, sans-serif; }
-	h1 { color: #2c3e50; }
-	table { width: 100%; border-collapse: collapse; }
-	th, td { text-align: left; padding: 8px; border: 1px solid #ddd; }
-	th { background-color: #f0f0f0; }
-	tr:nth-child(even) { background-color: #f9f9f9; }
-	a { color: #3498db; text-decoration: none; }
-	a:hover { text-decoration: underline; }
-</style>
+    <title>Dependency License Report</title>
+    <style>
+        body { font-family: Arial, sans-serif; }
+        h1 { color: #2c3e50; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { text-align: left; padding: 8px; border: 1px solid #ddd; }
+        th { background-color: #f0f0f0; }
+        tr:nth-child(even) { background-color: #f9f9f9; }
+        a { color: #3498db; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+    </style>
 </head>
 <body>
-<h1>Kotlin Dependencies</h1>
-<table>
-	<thead>
-		<tr>
-			<th>Package</th>
-			<th>License</th>
-			<th>Details</th>
-		</tr>
-	</thead>
-	<tbody>
-		{{range $name, $version := .}}
-		<tr>
-			<td>{{$name}}</td>
-			{{if ne $version "Unknown"}}
-				{{$group, $artifact := getDependencyInfo $name}}
-				{{$license, $url := getLicenseInfo $group $artifact $version}}
-				<td>{{$license}}</td>
-				<td><a href="{{$url}}" target="_blank">View Details</a></td>
-			{{else}}
-				<td>Unknown</td>
-				<td><a href="https://www.google.com/search?q={{$name}}+license" target="_blank">View Details</a></td>
-			{{end}}
-		</tr>
-		{{end}}
-	</tbody>
-</table>
+    <h1>Kotlin Dependencies</h1>
+    <table>
+        <thead>
+            <tr>
+                <th>Package</th>
+                <th>Version</th>
+                <th>License</th>
+                <th>Details</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range $dep, $version := .}}
+            <tr>
+                <td>{{$dep}}</td>
+                <td>{{$version}}</td>
+                {{$group, $artifact := extractDependencyInfo $dep}}
+                {{$license, $url := getLicenseInfo $group $artifact $version}}
+                <td>{{$license}}</td>
+                <td><a href="{{$url}}" target="_blank">View Details</a></td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
 </body>
-</html>
-` + "`" + `
+</html>` + "`" + `
 
-            // Create a new template and parse the HTML template
-            tmpl, err := template.New("report").Funcs(template.FuncMap{
-              "getLicenseInfo":    getLicenseInfo,
-              "getDependencyInfo": extractDependencyInfo,
-            }).Parse(htmlTemplate)
-            if err != nil {
-              return fmt.Errorf("error creating template: %v", err)
-            }
+              // Create a new template and parse the HTML template
+              tmpl, err := template.New("report").Funcs(template.FuncMap{
+                  "extractDependencyInfo": extractDependencyInfo,
+                  "getLicenseInfo":        getLicenseInfo,
+              }).Parse(htmlTemplate)
+              if err != nil {
+                  return fmt.Errorf("error creating template: %v", err)
+              }
 
-            // Create the report file
-            reportPath := filepath.Join(outputDir, "dependency-license-report.html")
-            file, err := os.Create(reportPath)
-            if err != nil {
-              return fmt.Errorf("error creating report file: %v", err)
-            }
-            defer file.Close()
+              // Create the report file
+              reportPath := filepath.Join(outputDir, "dependency-license-report.html")
+              file, err := os.Create(reportPath)
+              if err != nil {
+                  return fmt.Errorf("error creating report file: %v", err)
+              }
+              defer file.Close()
 
-            // Execute the template with the dependencies and write to the file
-            err = tmpl.Execute(file, dependencies)
-            if err != nil {
-              return fmt.Errorf("error generating report: %v", err)
-            }
+              // Execute the template with the dependencies and write to the file
+              err = tmpl.Execute(file, dependencies)
+              if err != nil {
+                  return fmt.Errorf("error generating report: %v", err)
+              }
 
-            fmt.Println("✅ License report successfully generated at", reportPath)
-            return nil
+              fmt.Println("✅ License report successfully generated at", reportPath)
+              return nil
           }
 
           func main() {
