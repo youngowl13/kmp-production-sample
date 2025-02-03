@@ -30,7 +30,7 @@ jobs:
       - name: Create license checker directory and Go code
         run: |
           mkdir -p license-checker
-          cat <<-'EOF' > license-checker/license-checker.go
+          cat << 'EOF' > license-checker/license-checker.go
           package main
 
           import (
@@ -260,7 +260,6 @@ jobs:
       - name: Verify License Report Location
         run: |
           echo "🔍 Checking if license report exists..."
-          ls -l ./license-checker || echo "❌ License report not found!"
           if [ -f ./license-checker/dependency-license-report.html ]; then
             echo "✅ Report exists at ./license-checker/dependency-license-report.html"
           else
