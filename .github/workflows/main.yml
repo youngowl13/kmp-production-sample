@@ -13,24 +13,20 @@ jobs:
   check-licenses:
     runs-on: ubuntu-latest
     steps:
-      # Step 1: Checkout the repository
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Step 2: Determine the latest Go version dynamically
       - name: Determine latest Go version
         id: get_go_version
         run: |
           latest_go_version=$(curl -s https://go.dev/VERSION?m=text | sed 's/^go//' | head -n 1)
           echo "go-version=$latest_go_version" >> "$GITHUB_OUTPUT"
 
-      # Step 3: Set up the Go environment
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
           go-version: ${{ steps.get_go_version.outputs.go-version }}
 
-      # Step 4: Create license checker directory and Go code
       - name: Create license checker directory and Go code
         run: |
           mkdir -p license-checker
@@ -141,10 +137,10 @@ jobs:
 
           func extractDependencyInfo(depName string) (string, string, error) {
               knownFormats := map[string]string{
-                  "agp":              "com.android.tools.build:gradle",
-                  "androidx-core-ktx": "androidx.core:core-ktx",
-                  "appcompat":        "androidx.appcompat:appcompat",
-                  "material":         "com.google.android.material:material",
+                  "agp":                          "com.android.tools.build:gradle",
+                  "androidx-core-ktx":            "androidx.core:core-ktx",
+                  "appcompat":                    "androidx.appcompat:appcompat",
+                  "material":                     "com.google.android.material:material",
               }
 
               if groupID, ok := knownFormats[depName]; ok {
