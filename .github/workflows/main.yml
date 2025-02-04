@@ -3,35 +3,31 @@ name: Kotlin Dependency License Report
 on:
   push:
     branches:
-      - master
+      - main
   pull_request:
     branches:
-      - master
+      - main
 
 jobs:
   license-check:
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1: Checkout the repository
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # Step 2: Setup Go environment
       - name: Setup Go
         uses: actions/setup-go@v4
         with:
           go-version: '1.20'
 
-      # Step 3: Create and Build License Checker
       - name: Create and Build License Checker
         run: |
-          # Create a working directory for the license checker
           mkdir -p license-checker
           cd license-checker
-
-          # Write the Go source code into main.go
-          cat << 'EOF' > main.go
+          # Write the Go source code into main.go using a heredoc.
+          # IMPORTANT: The heredoc content must start flush left (with no leading spaces).
+          cat > main.go <<'EOF'
 package main
 
 import (
@@ -345,7 +341,7 @@ func generateHTMLReport(dependencies map[string]string) error {
 		os.Mkdir(outputDir, 0755)
 	}
 
-	htmlTemplate := ` + "`" + `<!DOCTYPE html>
+	htmlTemplate := `<!DOCTYPE html>
 <html>
 <head>
     <title> Kotlin Dependency License Report </title>
@@ -395,7 +391,7 @@ func generateHTMLReport(dependencies map[string]string) error {
         </tbody>
     </table>
 </body>
-</html>` + "`" + `
+</html>`
 	tmpl, err := template.New("report").Funcs(template.FuncMap{
 		"getLicenseInfoWrapper": getLicenseInfoWrapper,
 		"isCopyleft":            isCopyleft,
@@ -473,20 +469,15 @@ func main() {
 	fmt.Printf("Output saved to: %s\n", outputFilePath)
 }
 EOF
-
-          # Initialize the Go module and download dependencies.
+          # Initialize the Go module and get dependencies.
           go mod init license-checker
           go get github.com/pelletier/go-toml
           go mod tidy
-
-          # Build the executable (placing it in the repository root).
+          # Build the executable and place it one directory above.
           go build -o ../checker
-          
-      # Step 4: Run the License Checker
+          cd ..
       - name: Run License Checker
         run: ./checker
-
-      # Step 5: Upload the generated artifacts (HTML report and output log)
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
